@@ -1,0 +1,8 @@
+{
+  "name": "LingoPro Localization Suite",
+  "description": "An enterprise-grade localization platform featuring document translation, XLIFF editing, audio transcription, and real-time AI-powered interpreting using Gemini 3 Flash and Live API.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
+}

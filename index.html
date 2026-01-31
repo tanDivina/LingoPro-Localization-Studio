@@ -1,0 +1,129 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LingoPro Localization Suite | Premium Global Localization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            blue: '#3b82f6',
+                            mist: '#F8FAFC',
+                            beam: '#60A5FA',
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'beam-flow': 'beam-flow 3s linear infinite',
+                        'float': 'float 6s ease-in-out infinite',
+                        'marquee': 'marquee 30s linear infinite',
+                    },
+                    keyframes: {
+                        'beam-flow': {
+                            '0%': { 'stroke-dashoffset': '1000' },
+                            '100%': { 'stroke-dashoffset': '0' },
+                        },
+                        'float': {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-20px)' },
+                        },
+                        'marquee': {
+                            '0%': { transform: 'translateX(0%)' },
+                            '100%': { transform: 'translateX(-50%)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F8FAFC;
+            overflow-x: hidden;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .dark .glass {
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .spotlight-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+            background: radial-gradient(circle at var(--x) var(--y), rgba(59, 130, 246, 0.03) 0%, transparent 40%);
+        }
+        .sticker-gloss {
+            position: relative;
+            overflow: hidden;
+        }
+        .sticker-gloss::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.3), transparent);
+            transform: rotate(45deg);
+            animation: gloss 3s infinite;
+        }
+        @keyframes gloss {
+            0% { left: -100%; top: -100%; }
+            100% { left: 100%; top: 100%; }
+        }
+        .liquid-fill {
+            position: relative;
+            z-index: 1;
+        }
+        .liquid-fill::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 0;
+            background: #3b82f6;
+            z-index: -1;
+            transition: height 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        .liquid-fill:hover::before {
+            height: 100%;
+        }
+        .kinetic-text {
+            transition: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "@google/genai": "https://esm.sh/@google/genai@^1.36.0",
+    "jszip": "https://esm.sh/jszip@^3.10.1"
+  }
+}
+</script>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>
