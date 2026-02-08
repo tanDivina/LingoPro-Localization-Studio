@@ -3,6 +3,11 @@ import { GoogleGenAI, LiveServerMessage, Modality, Type } from "@google/genai";
 import { GlossaryTerm, SUPPORTED_LANGUAGES, StyleguideRule, StyleguideReport } from "../types";
 
 export class GeminiService {
+  // Simulate an Agency-Scale Translation Memory Lookup (Vector DB)
+  async lookupTranslationMemory(source: string, targetLang: string): Promise<string | null> {
+    return null; // Local TM handled in component
+  }
+
   // Detect language of the provided text
   async detectLanguage(text: string): Promise<string> {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -21,24 +26,25 @@ export class GeminiService {
     return SUPPORTED_LANGUAGES.includes(detected) ? detected : "English";
   }
 
-  // Standard Text Translation with Brand Awareness
+  // Standard Text Translation with Expert Brand Awareness
   async translateText(text: string, sourceLang: string, targetLang: string, glossary?: GlossaryTerm[], styleguideRules?: StyleguideRule[]) {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    let instruction = "";
+    let instruction = `Act as an expert technical translator. Translate from ${sourceLang} to ${targetLang}. 
+    Preserve structural tags and formatting. Maintain a professional brand tone.`;
     
     if (glossary && glossary.length > 0) {
-      const glossaryList = glossary.map(g => `"${g.source}" -> "${g.target}"`).join(", ");
-      instruction += `\n\nGLOSSARY: ${glossaryList}. Always use these exact translations.`;
+      const glossaryList = glossary.map(g => `- "${g.source}" MUST be translated as "${g.target}"`).join("\n");
+      instruction += `\n\nEXPERT GLOSSARY (Strict Enforcement):\n${glossaryList}`;
     }
 
     if (styleguideRules && styleguideRules.length > 0) {
-      const rules = styleguideRules.map(r => `- ${r.type.toUpperCase()}: "${r.pattern}" -> ${r.description}`).join("\n");
-      instruction += `\n\nBRAND STYLEGUIDE RULES:\n${rules}\nEnsure the translation adheres strictly to these brand guidelines.`;
+      const rules = styleguideRules.map(r => `- ${r.type.toUpperCase()}: Pattern "${r.pattern}" requires: ${r.description}`).join("\n");
+      instruction += `\n\nBRAND STYLEGUIDE RULES:\n${rules}`;
     }
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Translate from ${sourceLang} to ${targetLang}. Preserve formatting and tone: \n\n${text}${instruction}`,
+      contents: `${instruction}\n\nTEXT TO TRANSLATE:\n${text}`,
       config: {
         temperature: 0.1,
       }
@@ -162,122 +168,103 @@ export class GeminiService {
     return JSON.parse(response.text || '{"issues": [], "overall_score": 100}');
   }
 
-  // Automated Consistency Analysis
-  async resolveInconsistency(source: string, variations: string[], targetLang: string, glossary: GlossaryTerm[]) {
+  // Establish a live session for audio-to-audio interpretation
+  async connectLiveInterpreter(callbacks: any, systemInstruction: string) {
+    // Create a new instance right before making an API call to ensure it always uses the most up-to-date API key.
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const glossaryText = glossary.map(g => `${g.source}: ${g.target}`).join(', ');
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `The source text segment "${source}" has been translated inconsistently in these ways for ${targetLang}: [${variations.join(', ')}].
-      Considering standard localization practices and this glossary: [${glossaryText}], which translation is the most accurate and consistent? 
-      Provide a clear recommendation and a brief linguistic analysis.
-      Return ONLY a JSON object with this structure: { "recommendation": "...", "reasoning": "..." }`,
+    return ai.live.connect({
+      model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+      callbacks,
       config: {
-        responseMimeType: "application/json",
-        temperature: 0.1,
-      }
+        responseModalities: [Modality.AUDIO],
+        systemInstruction,
+        speechConfig: {
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
+        },
+      },
     });
-    return JSON.parse(response.text || '{}');
   }
 
-  // Cultural Nuance Analysis
-  async analyzeNuance(text: string, targetCulture: string) {
+  // Analyze text for cultural nuances and return a JSON report
+  async analyzeNuance(text: string, culture: string): Promise<string> {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Analyze this localized text for cultural suitability in ${targetCulture}. 
-      Identify:
-      1. Taboos or offensive phrases.
-      2. Idioms that don't translate well.
-      3. Tone appropriateness.
-      4. A "Nuance Score" from 0 to 100.
+      contents: `Analyze the following text for cultural suitability in the ${culture} context.
+      Identify potential taboos, idioms that don't translate well, tone issues, or grammatical nuances.
+      Return a JSON object with a 'nuance_score' (0-100) and an 'insights' array of objects each with 'category', 'message', 'severity', and 'suggestion'.
+      
       Text: "${text}"`,
       config: {
         responseMimeType: "application/json",
+        temperature: 0.2,
       }
     });
-    return response.text;
+    return response.text || "{}";
   }
 
-  // Multimodal Voice Analysis for Cloning
-  async analyzeVoice(base64Audio: string, mimeType: string) {
+  // Generate speech from text using the TTS model
+  async generateSpeech(text: string, voiceName: string, emotion?: string, cloningPrompt?: string): Promise<string | undefined> {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: {
-        parts: [
-          { inlineData: { data: base64Audio, mimeType } },
-          { text: "Analyze the vocal characteristics of this sample. Identify pitch (low/high), timbre (warm/bright), speed, and gender. Suggest which of these prebuilt voices is the best match: Kore, Puck, Charon, Fenrir, Zephyr. Return the results as a JSON object with 'pitch', 'timbre', 'pace', 'match', and 'cloning_prompt' (a brief style instruction)." }
-        ]
-      },
-      config: {
-        responseMimeType: "application/json"
-      }
-    });
-    return JSON.parse(response.text || '{}');
-  }
+    
+    // Construct instructions for emotion or style
+    let prompt = text;
+    if (emotion && emotion !== 'Neutral') {
+      prompt = `Deliver the following text with a ${emotion} emotion: ${text}`;
+    }
+    if (cloningPrompt) {
+      prompt = `Clone the speaking style described as "${cloningPrompt}" and say: ${prompt}`;
+    }
 
-  // Generate Speech using Gemini TTS
-  async generateSpeech(text: string, voiceName: 'Kore' | 'Puck' | 'Charon' | 'Fenrir' | 'Zephyr' = 'Kore', emotion: string = 'Neutral', cloningPrompt?: string) {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
-    // If we have a cloning prompt, we prepend it to guide the TTS generation style
-    const instruction = cloningPrompt ? `[STYLE: ${cloningPrompt}] ` : "";
-    const prompt = emotion === 'Neutral' ? `${instruction}${text}` : `${instruction}Say ${emotion.toLowerCase()}: ${text}`;
-    
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash-preview-tts",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
-        responseModalalities: [Modality.AUDIO],
+        responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: {
-            prebuiltVoiceConfig: { voiceName },
+            prebuiltVoiceConfig: { voiceName: voiceName as any },
           },
         },
       },
     });
+    
+    // The audio bytes are in candidates[0].content.parts[0].inlineData.data as base64
     return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
   }
 
-  // Connect to Live API for Interpreting
-  connectLiveInterpreter(callbacks: {
-    onopen: () => void;
-    onmessage: (msg: LiveServerMessage) => void;
-    onerror: (e: any) => void;
-    onclose: (e: any) => void;
-  }, systemInstruction: string) {
+  // Generate Subtitles from Video Metadata or Sample
+  async generateSubtitles(fileName: string, targetLang: string) {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    return ai.live.connect({
-      model: 'gemini-2.5-flash-native-audio-preview-12-2025',
-      callbacks,
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Generate a sample set of subtitles for a video titled "${fileName}". 
+      The content should be professional and localized into ${targetLang}. 
+      Return at least 5 subtitles with start and end times in SRT format style (HH:MM:SS,mmm).`,
       config: {
-        responseModalalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              start: { type: Type.STRING, description: "Start time in HH:MM:SS,mmm format" },
+              end: { type: Type.STRING, description: "End time in HH:MM:SS,mmm format" },
+              text: { type: Type.STRING, description: "The localized subtitle text" }
+            },
+            required: ["start", "end", "text"]
+          }
         },
-        systemInstruction,
-      },
-    });
-  }
-
-  // Dictation using Live API transcription
-  connectVoiceDictation(callbacks: {
-    onopen: () => void;
-    onmessage: (msg: LiveServerMessage) => void;
-    onerror: (e: any) => void;
-    onclose: (e: any) => void;
-  }) {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    return ai.live.connect({
-      model: 'gemini-2.5-flash-native-audio-preview-12-2025',
-      callbacks,
-      config: {
-        responseModalalities: [Modality.AUDIO],
-        inputAudioTranscription: {},
-        systemInstruction: 'You are a professional transcription assistant. Transcribe the user audio input accurately.',
+        temperature: 0.7,
       }
     });
+
+    try {
+      return JSON.parse(response.text || '[]');
+    } catch (e) {
+      console.error("Failed to parse subtitles:", e);
+      return [];
+    }
   }
 }
 

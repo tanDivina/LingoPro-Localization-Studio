@@ -19,11 +19,38 @@
                             beam: '#60A5FA',
                         }
                     },
+                    spacing: {
+                        '1': '4px',
+                        '2': '8px',
+                        '3': '12px',
+                        '4': '16px',
+                        '6': '24px',
+                        '8': '32px',
+                        '12': '48px',
+                        '16': '64px',
+                        '24': '96px',
+                        '32': '128px',
+                    },
+                    borderRadius: {
+                        'sm': '8px',
+                        'md': '16px',
+                        'lg': '24px',
+                        'xl': '32px',
+                    },
+                    boxShadow: {
+                        'brand-sm': '0 2px 4px rgba(0,0,0,0.06)',
+                        'brand-md': '0 4px 12px rgba(0,0,0,0.08)',
+                        'brand-lg': '0 12px 24px rgba(0,0,0,0.12)',
+                        'brand-xl': '0 24px 48px rgba(0,0,0,0.16)',
+                    },
                     animation: {
                         'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
                         'beam-flow': 'beam-flow 3s linear infinite',
                         'float': 'float 6s ease-in-out infinite',
                         'marquee': 'marquee 30s linear infinite',
+                        'gradient-xy': 'gradient-xy 15s ease infinite',
+                        'pulse-border': 'pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'shimmer': 'shimmer 2s infinite linear',
                     },
                     keyframes: {
                         'beam-flow': {
@@ -37,6 +64,24 @@
                         'marquee': {
                             '0%': { transform: 'translateX(0%)' },
                             '100%': { transform: 'translateX(-50%)' },
+                        },
+                        'gradient-xy': {
+                            '0%, 100%': {
+                                'background-size': '400% 400%',
+                                'background-position': 'left center'
+                            },
+                            '50%': {
+                                'background-size': '400% 400%',
+                                'background-position': 'right center'
+                            }
+                        },
+                        'pulse-border': {
+                            '0%, 100%': { 'border-color': 'rgba(59, 130, 246, 0.3)' },
+                            '50%': { 'border-color': 'rgba(59, 130, 246, 1)' },
+                        },
+                        'shimmer': {
+                            '0%': { 'background-position': '-1000px 0' },
+                            '100%': { 'background-position': '1000px 0' }
                         }
                     }
                 }
@@ -49,6 +94,7 @@
             font-family: 'Inter', sans-serif;
             background-color: #F8FAFC;
             overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
         }
         .glass {
             background: rgba(255, 255, 255, 0.4);
@@ -60,56 +106,46 @@
             background: rgba(15, 23, 42, 0.4);
             border: 1px solid rgba(255, 255, 255, 0.05);
         }
-        .spotlight-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 9999;
-            background: radial-gradient(circle at var(--x) var(--y), rgba(59, 130, 246, 0.03) 0%, transparent 40%);
+        /* Accessibility: Standard Focus States */
+        :focus-visible {
+            outline: 2px solid #3b82f6;
+            outline-offset: 4px;
         }
-        .sticker-gloss {
-            position: relative;
-            overflow: hidden;
+        /* Design System Shadows & Micro-interactions */
+        .button-primary {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .sticker-gloss::after {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.3), transparent);
-            transform: rotate(45deg);
-            animation: gloss 3s infinite;
+        .button-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px rgba(59, 130, 246, 0.25);
         }
-        @keyframes gloss {
-            0% { left: -100%; top: -100%; }
-            100% { left: 100%; top: 100%; }
+        .feature-card {
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .liquid-fill {
-            position: relative;
-            z-index: 1;
+        .feature-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.12);
         }
-        .liquid-fill::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 0;
-            background: #3b82f6;
-            z-index: -1;
-            transition: height 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+        .sidebar-item-active {
+            background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
         }
-        .liquid-fill:hover::before {
-            height: 100%;
+        .progress-glow {
+            box-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
         }
-        .kinetic-text {
-            transition: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+        /* Skeleton Loading State */
+        .skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 1000px 100%;
+            animation: shimmer 2s infinite linear;
         }
+        .dark .skeleton {
+            background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+            background-size: 1000px 100%;
+        }
+        /* Hide scrollbars but keep functionality */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 <script type="importmap">
 {

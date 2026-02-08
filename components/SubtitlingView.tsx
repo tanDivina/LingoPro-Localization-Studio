@@ -1,16 +1,53 @@
 
 import React, { useState } from 'react';
+import { AppView } from '../types';
+import { geminiService } from '../services/geminiService';
 
-const SubtitlingView: React.FC = () => {
+interface SubtitlingViewProps {
+  setView?: (view: AppView) => void;
+}
+
+const SubtitlingView: React.FC<SubtitlingViewProps> = ({ setView }) => {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string>('');
+  const [isGenerating, setIsGenerating] = useState(false);
   const [subtitles, setSubtitles] = useState<{ start: string; end: string; text: string }[]>([
     { start: '00:00:01,000', end: '00:00:04,500', text: 'Welcome to the LingoPro Localization Suite global summit.' },
     { start: '00:00:05,000', end: '00:00:08,000', text: 'We are revolutionizing how content is localized using Gemini 3.' }
   ]);
   
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) setVideoUrl(URL.createObjectURL(file));
+    if (e && e.target && e.target.files) {
+      const files = e.target.files;
+      if (files.length > 0) {
+        const file = files[0];
+        setVideoUrl(URL.createObjectURL(file));
+        setFileName(file.name);
+      }
+    }
+  };
+
+  const handleGenerateSubtitles = async () => {
+    if (!fileName) {
+      alert("Please upload a video first.");
+      return;
+    }
+    setIsGenerating(true);
+    try {
+      // In a real production app, we would send the actual audio/video data.
+      // Here we simulate the process using the filename to generate relevant mock subtitles.
+      const aiSubtitles = await geminiService.generateSubtitles(fileName, 'English');
+      if (aiSubtitles && aiSubtitles.length > 0) {
+        setSubtitles(aiSubtitles);
+      } else {
+        alert("Failed to generate subtitles. Please try again.");
+      }
+    } catch (error) {
+      console.error("Subtitling error:", error);
+      alert("An error occurred during subtitle generation.");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const updateSub = (idx: number, field: 'start' | 'end' | 'text', val: string) => {
@@ -54,25 +91,51 @@ const SubtitlingView: React.FC = () => {
             <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
               <i className="ph-bold ph-video-camera-slash text-6xl mb-4"></i>
               <p className="text-sm font-bold uppercase tracking-widest">No Video Loaded</p>
-              <label className="mt-6 px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold cursor-pointer hover:bg-indigo-700 shadow-xl">
-                Upload Master Video
-                <input type="file" className="hidden" accept="video/*" onChange={handleVideoUpload} />
-              </label>
+              <div className="flex gap-4 mt-6">
+                <button 
+                  onClick={() => setView?.(AppView.DASHBOARD)}
+                  className="px-6 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold hover:bg-slate-700 shadow-xl flex items-center gap-2"
+                >
+                  <i className="ph-bold ph-house"></i>
+                  Home
+                </button>
+                <label className="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold cursor-pointer hover:bg-indigo-700 shadow-xl">
+                  Upload Master Video
+                  <input type="file" className="hidden" accept="video/*" onChange={handleVideoUpload} />
+                </label>
+              </div>
             </div>
           )}
         </div>
         <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800">
           <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-2">Automated Temporal Analysis</h4>
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">LingoPro uses Gemini 3 to automatically generate perfectly timed subtitles from video audio, optimized for localized reading speeds.</p>
-          <button className="w-full py-3 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 font-bold rounded-xl border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all">
-            Generate Subtitles with Gemini
+          <button 
+            onClick={handleGenerateSubtitles}
+            disabled={isGenerating || !fileName}
+            className="w-full py-3 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 font-bold rounded-xl border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all disabled:opacity-50"
+          >
+            {isGenerating ? (
+              <span className="flex items-center justify-center gap-2">
+                <i className="ph ph-spinner animate-spin"></i> Analyzing Video Stream...
+              </span>
+            ) : "Generate Subtitles with Gemini"}
           </button>
         </div>
       </div>
 
       <div className="lg:col-span-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col h-[700px]">
         <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/30">
-          <span className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-tight">Timeline Editor</span>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setView?.(AppView.DASHBOARD)}
+              className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"
+              title="Home"
+            >
+              <i className="ph ph-house text-xl"></i>
+            </button>
+            <span className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-tight">Timeline Editor</span>
+          </div>
           <div className="flex space-x-2">
             <button onClick={() => exportSubtitles('srt')} title="Download SRT" className="p-1.5 text-slate-400 hover:text-indigo-600"><i className="ph-bold ph-download-simple text-xl"></i></button>
             <button onClick={() => exportSubtitles('vtt')} title="Download VTT" className="p-1.5 text-slate-400 hover:text-brand-blue"><i className="ph-bold ph-export text-xl"></i></button>

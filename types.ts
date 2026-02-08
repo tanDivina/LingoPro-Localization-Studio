@@ -66,7 +66,8 @@ export interface XliffSegment {
   status: 'untranslated' | 'translated' | 'approved' | 'locked' | 'hidden';
   internalState?: string;
   fileName?: string;
-  isTmMatch?: boolean;
+  matchScore?: number; // 0-100 for TM matches
+  matchType?: 'TM' | 'MT' | 'Manual';
   isTranslatable?: boolean;
 }
 
@@ -81,6 +82,8 @@ export interface TranslationMemoryEntry {
   target: string;
   usageCount: number;
   lastUsed: string;
+  sourceLang: string;
+  targetLang: string;
 }
 
 export const SUPPORTED_LANGUAGES = [

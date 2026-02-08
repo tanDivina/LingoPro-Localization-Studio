@@ -3,9 +3,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { LiveServerMessage } from '@google/genai';
 import { geminiService } from '../services/geminiService';
 import { decode, decodeAudioData, createPcmBlob } from '../utils/audio';
-import { SUPPORTED_LANGUAGES } from '../types';
+import { SUPPORTED_LANGUAGES, AppView } from '../types';
 
-const LiveInterpreter: React.FC = () => {
+interface LiveInterpreterProps {
+  setView?: (view: AppView) => void;
+}
+
+const LiveInterpreter: React.FC<LiveInterpreterProps> = ({ setView }) => {
   const [isActive, setIsActive] = useState(false);
   const [sourceLang, setSourceLang] = useState('English');
   const [targetLang, setTargetLang] = useState('Japanese');
@@ -134,6 +138,13 @@ const LiveInterpreter: React.FC = () => {
     <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden min-h-[500px] flex flex-col transition-colors duration-300">
       <div className="bg-slate-900 dark:bg-slate-950 p-6 flex flex-col md:flex-row justify-between items-start md:items-center text-white gap-4">
         <div className="flex items-center space-x-3">
+          <button 
+            onClick={() => setView?.(AppView.DASHBOARD)}
+            className="w-10 h-10 bg-slate-800 text-white rounded-xl hover:bg-slate-700 transition-all shadow-lg flex items-center justify-center border border-slate-700" 
+            title="Home"
+          >
+            <i className="ph-bold ph-house text-lg"></i>
+          </button>
           <div className={`w-3 h-3 rounded-full ${isActive ? 'bg-red-500 animate-pulse' : 'bg-slate-600'}`}></div>
           <h2 className="font-bold">Live Session: {sourceLang} → {targetLang}</h2>
         </div>

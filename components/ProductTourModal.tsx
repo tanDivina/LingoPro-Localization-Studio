@@ -52,6 +52,18 @@ const ProductTourModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentData, setCurrentData] = useState<Subtitle | null>(null);
 
+  useEffect(() => {
+    // Cleanup function to prevent "interrupted by media removal" errors
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.pause();
+        // Remove source and load to fully stop the element
+        videoRef.current.removeAttribute('src');
+        videoRef.current.load();
+      }
+    };
+  }, []);
+
   const handleTimeUpdate = () => {
     if (videoRef.current) {
       const time = videoRef.current.currentTime;
@@ -66,7 +78,13 @@ const ProductTourModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const togglePlay = () => {
     if (videoRef.current) {
       if (videoRef.current.paused) {
-        videoRef.current.play();
+        const playPromise = videoRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            // Play was prevented (e.g. by closing the modal or browser policy)
+            console.debug("Playback interrupted or prevented:", error);
+          });
+        }
         setIsPlaying(true);
       } else {
         videoRef.current.pause();

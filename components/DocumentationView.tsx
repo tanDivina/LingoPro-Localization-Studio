@@ -1,7 +1,12 @@
 
 import React, { useState, useMemo } from 'react';
+import { AppView } from '../types';
 
-const DocumentationView: React.FC = () => {
+interface DocumentationViewProps {
+  setView?: (view: AppView) => void;
+}
+
+const DocumentationView: React.FC<DocumentationViewProps> = ({ setView }) => {
   const [activeTab, setActiveTab] = useState('getting-started');
   const [feedbackGiven, setFeedbackGiven] = useState(false);
   const [showShareToast, setShowShareToast] = useState(false);
@@ -9,9 +14,9 @@ const DocumentationView: React.FC = () => {
   const sections = [
     { id: 'getting-started', label: 'Getting Started', icon: 'ph-rocket-launch' },
     { id: 'translation-engine', label: 'Translation Engine', icon: 'ph-translate' },
+    { id: 'agency-infra', label: 'Agency Infrastructure', icon: 'ph-database' },
     { id: 'live-interpreting', label: 'Live Interpreting', icon: 'ph-microphone-stage' },
     { id: 'acoustic-lab', label: 'Acoustic Lab', icon: 'ph-flask' },
-    { id: 'visual-vision', label: 'Visual Vision', icon: 'ph-eye' },
     { id: 'glossary-tm', label: 'Glossary & TM', icon: 'ph-books' },
     { id: 'compliance-standards', label: 'Compliance & Standards', icon: 'ph-shield-check' },
     { id: 'security-whitepaper', label: 'Security Whitepaper', icon: 'ph-file-lock' },
@@ -58,13 +63,103 @@ const DocumentationView: React.FC = () => {
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'agency-infra':
+        return (
+          <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="space-y-4">
+              <h3 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">Agency Infrastructure</h3>
+              <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+                To move from a local prototype to an Agency-Grade tool, we transition from browser storage to a persistent Cloud Infrastructure.
+              </p>
+            </div>
+
+            <div className="space-y-8">
+              <div className="p-8 bg-slate-900 rounded-[2rem] border border-slate-800 text-white overflow-hidden relative">
+                <div className="absolute top-0 right-0 p-8 opacity-10">
+                   <i className="ph-bold ph-database text-9xl"></i>
+                </div>
+                <h4 className="text-xs font-black text-brand-blue uppercase tracking-widest mb-6">Database Schema (PostgreSQL)</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-[11px] font-mono">
+                  <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                    <p className="text-brand-blue mb-2 font-black">TABLE: translation_memory</p>
+                    <ul className="space-y-1 text-white/60">
+                      <li>- id: UUID (PK)</li>
+                      <li>- source_hash: VARCHAR(64) (Indexed)</li>
+                      <li>- source_text: TEXT</li>
+                      <li>- target_text: TEXT</li>
+                      <li>- match_quality: INT (0-100)</li>
+                      <li>- domain_context: VARCHAR(255)</li>
+                    </ul>
+                  </div>
+                  <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                    <p className="text-emerald-400 mb-2 font-black">TABLE: segments</p>
+                    <ul className="space-y-1 text-white/60">
+                      <li>- id: UUID (PK)</li>
+                      <li>- project_id: UUID (FK)</li>
+                      <li>- asset_id: UUID (FK)</li>
+                      <li>- status: ENUM('New', 'Review', 'Final')</li>
+                      <li>- locked: BOOLEAN</li>
+                      <li>- last_modified_by: UUID</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="p-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl space-y-4 shadow-sm">
+                   <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                      <i className="ph-bold ph-cloud-arrow-up text-2xl"></i>
+                   </div>
+                   <h5 className="font-black text-slate-800 dark:text-white uppercase tracking-tight">Blob Storage (S3/GCS)</h5>
+                   <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                     Raw localization assets (PDFs, Videos, Audio) are never stored in the database. We use S3 buckets with Signed URLs to ensure secure, high-speed access for translators while minimizing DB overhead.
+                   </p>
+                </div>
+                <div className="p-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl space-y-4 shadow-sm">
+                   <div className="w-12 h-12 bg-amber-50 dark:bg-amber-900/30 rounded-2xl flex items-center justify-center text-amber-600 dark:text-amber-400">
+                      <i className="ph-bold ph-users-three text-2xl"></i>
+                   </div>
+                   <h5 className="font-black text-slate-800 dark:text-white uppercase tracking-tight">Multi-Tenant Workspaces</h5>
+                   <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                     Agencies can manage multiple sub-accounts. A strict Row-Level Security (RLS) policy in PostgreSQL ensures that Translator A cannot see the TM or Glossary of Brand B unless specifically authorized.
+                   </p>
+                </div>
+              </div>
+
+              <div className="bg-emerald-50 dark:bg-emerald-900/10 p-8 rounded-[2rem] border border-emerald-100 dark:border-emerald-800/50">
+                 <h4 className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-4">Production Connectivity</h4>
+                 <p className="text-sm text-emerald-800 dark:text-emerald-200 leading-relaxed font-medium mb-4">
+                   In a live agency environment, the frontend calls a <strong>Node.js or Python Backend</strong>. This backend handles:
+                 </p>
+                 <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                   <li className="flex items-center space-x-2 text-xs text-emerald-700 dark:text-emerald-300">
+                      <i className="ph-bold ph-check-circle"></i>
+                      <span>XLIFF Re-serialization</span>
+                   </li>
+                   <li className="flex items-center space-x-2 text-xs text-emerald-700 dark:text-emerald-300">
+                      <i className="ph-bold ph-check-circle"></i>
+                      <span>TM Lookups via Vector DB</span>
+                   </li>
+                   <li className="flex items-center space-x-2 text-xs text-emerald-700 dark:text-emerald-300">
+                      <i className="ph-bold ph-check-circle"></i>
+                      <span>Webhooks for CMS Integration</span>
+                   </li>
+                   <li className="flex items-center space-x-2 text-xs text-emerald-700 dark:text-emerald-300">
+                      <i className="ph-bold ph-check-circle"></i>
+                      <span>Audit Logs (ISO-27001)</span>
+                   </li>
+                 </ul>
+              </div>
+            </div>
+          </div>
+        );
       case 'getting-started':
         return (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="space-y-4">
               <h3 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">Platform Initiation</h3>
               <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-                Welcome to LingoPro, the frontier of global localization. Our suite is designed for enterprises requiring high-fidelity adaptation across all modalities: text, audio, and visual assets.
+                Welcome to LingoPro, the frontier of global localization. Our suite is designed for enterprises requiring high-fidelity adaptation across all modalities.
               </p>
             </div>
             
@@ -75,7 +170,7 @@ const DocumentationView: React.FC = () => {
                 </div>
                 <h4 className="font-bold text-slate-800 dark:text-white mb-2">API Authentication</h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  All expert modules utilize a secure environment variable for API access. Ensure your workspace is configured with valid credentials to unlock Gemini 3 Pro and Live Native Audio capabilities.
+                  All expert modules utilize a secure environment variable for API access.
                 </p>
               </div>
               <div className="p-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -84,19 +179,20 @@ const DocumentationView: React.FC = () => {
                 </div>
                 <h4 className="font-bold text-slate-800 dark:text-white mb-2">Multi-Regional Edge</h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Select your target locale from the global region menu. LingoPro automatically optimizes its semantic processing based on cultural variances and regional taboos.
+                  Optimize semantic processing based on cultural variances.
                 </p>
               </div>
             </div>
 
-            <div className="bg-slate-900 dark:bg-black p-8 rounded-[2rem] border border-slate-800 space-y-4">
-              <h4 className="text-xs font-black text-brand-blue uppercase tracking-widest">Technical Stack</h4>
-              <div className="flex flex-wrap gap-3">
-                <span className="px-3 py-1 bg-white/5 text-white/60 text-[10px] font-mono rounded-lg border border-white/10">Gemini 3 Pro-Preview</span>
-                <span className="px-3 py-1 bg-white/5 text-white/60 text-[10px] font-mono rounded-lg border border-white/10">Gemini 2.5 Live Native Audio</span>
-                <span className="px-3 py-1 bg-white/5 text-white/60 text-[10px] font-mono rounded-lg border border-white/10">React 19 Concurrent Mode</span>
-                <span className="px-3 py-1 bg-white/5 text-white/60 text-[10px] font-mono rounded-lg border border-white/10">Tailwind CSS v3</span>
-              </div>
+            <div className="bg-indigo-600 p-8 rounded-[2rem] border border-indigo-500 shadow-xl space-y-4">
+               <h4 className="text-xs font-black text-indigo-200 uppercase tracking-widest">Ready to Translate?</h4>
+               <p className="text-white text-sm font-medium">Jump straight into the console to begin processing your first localization asset.</p>
+               <button 
+                onClick={() => setView?.(AppView.FILE_TRANSLATOR)}
+                className="px-6 py-3 bg-white text-indigo-600 text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg hover:scale-105 transition-all"
+               >
+                 Launch File Translator
+               </button>
             </div>
           </div>
         );
@@ -127,55 +223,6 @@ const DocumentationView: React.FC = () => {
                   <p className="text-[11px] text-slate-500 leading-relaxed">OCR-enhanced localization. Gemini reconstructs text layers while maintaining background asset fidelity.</p>
                </div>
             </div>
-
-            <div className="space-y-8 pt-6 border-t border-slate-100 dark:border-slate-800">
-              <h4 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Expert Workflow Protocols</h4>
-              
-              <div className="space-y-6">
-                <div className="flex items-start space-x-6">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shrink-0 shadow-lg">
-                    <i className="ph-bold ph-magnifying-glass"></i>
-                  </div>
-                  <div className="space-y-2">
-                    <h5 className="font-bold text-slate-800 dark:text-slate-100 uppercase text-xs tracking-widest">Global Project Search</h5>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                      Entering a query in the Translation Studio automatically triggers a project-wide scan. It aggregates matching segments from all files in your queue, allowing you to edit strings across multiple assets without switching files manually.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start space-x-6">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center text-white shrink-0 shadow-lg">
-                    <i className="ph-bold ph-shield-check"></i>
-                  </div>
-                  <div className="space-y-2">
-                    <h5 className="font-bold text-slate-800 dark:text-slate-100 uppercase text-xs tracking-widest">Consistency Shield (Drift Audit)</h5>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                      Use the <strong>Global Consistency Check</strong> to detect "Drift"—segments with identical source text but conflicting translations. The Shield provides AI resolutions and propagates chosen fixes to every file in the project for 100% terminological unity.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start space-x-6">
-                  <div className="w-10 h-10 rounded-xl bg-slate-900 dark:bg-slate-700 flex items-center justify-center text-white shrink-0 shadow-lg">
-                    <i className="ph-bold ph-lock-simple-open"></i>
-                  </div>
-                  <div className="space-y-2">
-                    <h5 className="font-bold text-slate-800 dark:text-slate-100 uppercase text-xs tracking-widest">Safety Lock Override</h5>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                      By default, units marked with <code>translate="no"</code> or context-only segments are locked. Activate the <strong>Override</strong> toggle to perform surgical edits on protected units. Note: Override mode highlights segments in amber to caution against accidental code corruption.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-8 bg-indigo-50 dark:bg-indigo-900/20 rounded-[2.5rem] border border-indigo-100 dark:border-indigo-800/50">
-               <h4 className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-4">Pro-Tip: Source Pre-Flight</h4>
-               <p className="text-sm text-indigo-800 dark:text-indigo-200 leading-relaxed font-medium">
-                 Before translating, run the <strong>Source Readiness Report</strong>. Our AI scans for ambiguity, complex idioms, and grammatical flaws that could hinder translation accuracy. Fixing source issues early ensures a 30% higher target quality score.
-               </p>
-            </div>
           </div>
         );
       case 'security-whitepaper':
@@ -195,7 +242,7 @@ const DocumentationView: React.FC = () => {
                 </div>
                 <h4 className="text-lg font-black text-slate-800 dark:text-white uppercase tracking-tight">Data Encryption</h4>
                 <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                  All data is encrypted using AES-256 at rest and TLS 1.3 in transit. We utilize Hardware Security Modules (HSM) for key management, ensuring your proprietary content remains undecipherable to unauthorized parties.
+                  All data is encrypted using AES-256 at rest and TLS 1.3 in transit.
                 </p>
               </div>
 
@@ -205,106 +252,10 @@ const DocumentationView: React.FC = () => {
                 </div>
                 <h4 className="text-lg font-black text-slate-800 dark:text-white uppercase tracking-tight">Zero-Retention Policy</h4>
                 <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                  LingoPro operates on a strict ephemeral data model. Content processed through the Gemini APIs is never used to train foundational models and is purged from memory immediately following session termination.
+                  Content processed through the Gemini APIs is never used to train foundational models.
                 </p>
               </div>
             </div>
-
-            <div className="p-10 bg-indigo-950 rounded-[3rem] border border-indigo-900/50 space-y-6">
-              <h4 className="text-xs font-black text-brand-blue uppercase tracking-widest">PII & Sensitive Information Masking</h4>
-              <p className="text-sm text-indigo-100/70 leading-relaxed">
-                Our Pre-Processing Engine automatically detects and redacts Personally Identifiable Information (PII) before it ever reaches the neural translation layer.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-center">
-                  <p className="text-[10px] font-black text-indigo-300 uppercase mb-1">Masking Type</p>
-                  <p className="text-xs text-white font-bold">Regex & NLP</p>
-                </div>
-                <div className="px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-center">
-                  <p className="text-[10px] font-black text-indigo-300 uppercase mb-1">Latency Impact</p>
-                  <p className="text-xs text-white font-bold">&lt; 15ms</p>
-                </div>
-                <div className="px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-center">
-                  <p className="text-[10px] font-black text-indigo-300 uppercase mb-1">Accuracy</p>
-                  <p className="text-xs text-white font-bold">99.9% Recall</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h4 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest">Compliance Certifications</h4>
-              <div className="flex flex-wrap gap-4">
-                <div className="px-6 py-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center text-slate-500">
-                    <i className="ph-bold ph-certificate"></i>
-                  </div>
-                  <span className="text-xs font-bold">SOC2 Type II</span>
-                </div>
-                <div className="px-6 py-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center text-slate-500">
-                    <i className="ph-bold ph-certificate"></i>
-                  </div>
-                  <span className="text-xs font-bold">ISO 27001</span>
-                </div>
-                <div className="px-6 py-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center text-slate-500">
-                    <i className="ph-bold ph-certificate"></i>
-                  </div>
-                  <span className="text-xs font-bold">HIPAA Compliant</span>
-                </div>
-                <div className="px-6 py-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center text-slate-500">
-                    <i className="ph-bold ph-certificate"></i>
-                  </div>
-                  <span className="text-xs font-bold">GDPR Ready</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      case 'live-interpreting':
-        return (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h3 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">Live Interp. Protocol</h3>
-            <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-              Gemini 2.5 Live Native Audio is the heart of our verbal bridge. By streaming raw PCM audio, we achieve sub-500ms latency for global communication.
-            </p>
-          </div>
-        );
-      case 'acoustic-lab':
-        return (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h3 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">Vocal DNA Architecture</h3>
-            <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-              Our Voiceover Studio integrates Gemini's multimodal reasoning to analyze and synthesize human-like speech with emotional fidelity.
-            </p>
-          </div>
-        );
-      case 'visual-vision':
-        return (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h3 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">Visual Ad Adaptation</h3>
-            <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-              LingoPro leverages Gemini 3 Pro Vision to detect localizable assets within complex video and image frames.
-            </p>
-          </div>
-        );
-      case 'glossary-tm':
-        return (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h3 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">Glossary & TM Sync</h3>
-            <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-              Ensure 100% terminological consistency across thousands of assets using our Expert Terminology Pool and Translation Memory (TM) logic.
-            </p>
-          </div>
-        );
-      case 'compliance-standards':
-        return (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h3 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">Compliance & Ethics</h3>
-            <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-              LingoPro maintains the highest standards for data privacy, ethical AI usage, and linguistic accuracy.
-            </p>
           </div>
         );
       default:
@@ -326,8 +277,18 @@ const DocumentationView: React.FC = () => {
         </div>
       )}
 
-      {/* Search & Internal Nav */}
+      {/* Internal Nav */}
       <div className="lg:w-72 shrink-0 space-y-8">
+        
+        {/* Home Button */}
+        <button 
+          onClick={() => setView?.(AppView.DASHBOARD)}
+          className="w-full h-14 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl flex items-center justify-center space-x-3 shadow-xl hover:-translate-y-1 transition-all active:scale-95 group"
+        >
+          <i className="ph-bold ph-house text-lg group-hover:scale-110 transition-transform"></i>
+          <span className="text-[10px] font-black uppercase tracking-widest">Return to Dashboard</span>
+        </button>
+
         <div className="relative group">
            <i className="ph ph-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-blue transition-colors"></i>
            <input 
@@ -361,7 +322,7 @@ const DocumentationView: React.FC = () => {
               <span className="text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300">Certified v4.2</span>
            </div>
            <p className="text-[10px] text-slate-400 leading-relaxed font-medium">
-             Expert documentation maintained by the LingoPro Localization Board. Last updated: May 2025.
+             Expert documentation maintained by the LingoPro Localization Board.
            </p>
         </div>
       </div>
