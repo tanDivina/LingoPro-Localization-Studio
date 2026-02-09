@@ -1,4 +1,3 @@
-
 export enum AppView {
   DASHBOARD = 'DASHBOARD',
   FILE_TRANSLATOR = 'FILE_TRANSLATOR',
@@ -19,6 +18,14 @@ export interface StyleguideRule {
   replacement?: string;
   description: string;
   severity: 'High' | 'Medium' | 'Low';
+  sourceDocId?: string;
+}
+
+export interface StyleguideDocument {
+  id: string;
+  name: string;
+  uploadedAt: string;
+  size: number;
 }
 
 export interface StyleguideReport {

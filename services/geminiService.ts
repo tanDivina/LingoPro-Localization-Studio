@@ -62,6 +62,42 @@ export class GeminiService {
     return result.translation;
   }
 
+  async analyzeStyleguideDocument(content: string): Promise<StyleguideRule[]> {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Analyze the following style guide or brand documentation and extract exactly 10 actionable localization rules. 
+      Rules should include prohibited words, mandatory terms, tone instructions, or formatting rules.
+      
+      DOCUMENT CONTENT:
+      ${content.substring(0, 5000)}`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              type: { type: Type.STRING, enum: ['prohibited_word', 'mandatory_term', 'tone_rule', 'formatting_rule'] },
+              pattern: { type: Type.STRING, description: "The term or pattern to watch for." },
+              replacement: { type: Type.STRING, description: "Optional suggested replacement." },
+              description: { type: Type.STRING, description: "Clear explanation of why this rule exists." },
+              severity: { type: Type.STRING, enum: ['High', 'Medium', 'Low'] }
+            },
+            required: ["type", "pattern", "description", "severity"]
+          }
+        }
+      }
+    });
+    
+    try {
+      const rules = JSON.parse(response.text || '[]');
+      return rules.map((r: any, i: number) => ({ ...r, id: `ai-rule-${Date.now()}-${i}` }));
+    } catch (e) {
+      return [];
+    }
+  }
+
   async analyzeTranscreation(sourceImageBase64: string, sourceLang: string, targetLang: string) {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({

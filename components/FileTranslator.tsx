@@ -97,7 +97,18 @@ const FileTranslator: React.FC<FileTranslatorProps> = ({ setView }) => {
     safeLocalStorage.setItem('lingopro_tm', JSON.stringify(updated));
   };
 
+  const saveGlossary = (updated: GlossaryTerm[]) => {
+    setGlossary(updated);
+    safeLocalStorage.setItem('lingopro_glossary', JSON.stringify(updated));
+  };
+
+  const saveStyleguide = (updated: StyleguideRule[]) => {
+    setStyleguideRules(updated);
+    safeLocalStorage.setItem('lingopro_styleguide', JSON.stringify(updated));
+  };
+
   const loadDemo = () => {
+    // 1. Load Demo Text
     const demoContent = "LingoPro isn’t just another translation tool; it’s a high-performance production environment that consolidates everything a linguist needs. Our processing pipeline goes beyond simple translation by integrating your translation memories and glossaries directly with your brand’s style guide. While our file translator protects the integrity of complex layouts in DOCX and XLIFF formats, the system automatically cross-references every segment against your specific brand voice. You no longer need to toggle between documents—LingoPro keeps all your instructions in one cohesive view.";
     
     const newAsset: LocalizationAsset = {
@@ -113,16 +124,78 @@ const FileTranslator: React.FC<FileTranslatorProps> = ({ setView }) => {
     saveAssets(nextAssets);
     setActiveAssetId(newAsset.id);
 
-    // Manually trigger segment parsing for plain text demo
-    const demoSegments: XliffSegment[] = demoContent.split('. ').map((sentence, i) => ({
-      id: `demo-seg-${i}`,
-      source: sentence.endsWith('.') ? sentence : `${sentence}.`,
-      target: "",
-      status: 'untranslated',
-      isTranslatable: true,
-      fileName: newAsset.name
-    }));
+    // 2. Load Demo Glossary
+    const demoGlossary: GlossaryTerm[] = [
+      { source: "LingoPro", target: "LingoPro", description: "Brand name - Do not translate." },
+      { source: "translation memories", target: "memorias de traducción", description: "Standard technical term." },
+      { source: "glossaries", target: "glosarios", description: "Linguistic reference sets." },
+      { source: "style guide", target: "guía de estilo", description: "Brand voice document." },
+      { source: "linguist", target: "lingüista", description: "Expert user role." }
+    ];
+    saveGlossary(demoGlossary);
+
+    // 3. Load Demo TM (Pre-translate the first sentence)
+    const firstSentence = "LingoPro isn’t just another translation tool; it’s a high-performance production environment that consolidates everything a linguist needs.";
+    const firstSentenceTranslation = "LingoPro no es solo otra herramienta de traducción; es un entorno de producción de alto rendimiento que consolida todo lo que un lingüista necesita.";
+    const nextTm = { ...translationMemory, [firstSentence]: firstSentenceTranslation };
+    saveTM(nextTm);
+
+    // 4. Load Demo Style Guide
+    const demoStyleguide: StyleguideRule[] = [
+      { 
+        id: "demo-rule-1", 
+        type: 'prohibited_word', 
+        pattern: "translation tool", 
+        replacement: "production environment", 
+        description: "LingoPro is an expert-grade environment, not a simple utility.", 
+        severity: 'High' 
+      },
+      { 
+        id: "demo-rule-2", 
+        type: 'tone_rule', 
+        pattern: "toggle", 
+        replacement: "switch", 
+        description: "Avoid casual tech-jargon; maintain a professional expert tone.", 
+        severity: 'Medium' 
+      },
+      { 
+        id: "demo-rule-3", 
+        type: 'mandatory_term', 
+        pattern: "LingoPro", 
+        description: "Brand naming must always be capitalized as LingoPro.", 
+        severity: 'High' 
+      },
+      { 
+        id: "demo-rule-4", 
+        type: 'formatting_rule', 
+        pattern: "...", 
+        replacement: "—", 
+        description: "Use em-dashes instead of ellipsis for expert-grade punctuation.", 
+        severity: 'Low' 
+      }
+    ];
+    saveStyleguide(demoStyleguide);
+
+    // 5. Manually trigger segment parsing for plain text demo with TM lookup
+    const sentences = demoContent.split('. ').filter(s => s.trim().length > 0);
+    const demoSegments: XliffSegment[] = sentences.map((sentence, i) => {
+      const source = sentence.endsWith('.') ? sentence : `${sentence}.`;
+      const hasTmMatch = nextTm[source];
+      return {
+        id: `demo-seg-${i}`,
+        source,
+        target: hasTmMatch || "",
+        status: hasTmMatch ? 'human_verified' : 'untranslated',
+        matchType: hasTmMatch ? 'TM' : undefined,
+        confidenceScore: hasTmMatch ? 100 : undefined,
+        isTranslatable: true,
+        fileName: newAsset.name
+      };
+    });
     setSegments(demoSegments);
+    setSourceLang('English');
+    setTargetLang('Spanish');
+    setIsBrandGuardActive(true);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -309,7 +382,7 @@ const FileTranslator: React.FC<FileTranslatorProps> = ({ setView }) => {
             <div className="flex items-center space-x-2">
               <button 
                 onClick={loadDemo}
-                title="Load Expert Demo File"
+                title="Load Expert Demo Workspace (Asset + Glossary + TM + Style Guide)"
                 className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm border border-blue-100 dark:border-blue-800/40"
               >
                 <i className="ph-bold ph-magic-wand"></i>
