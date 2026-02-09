@@ -5,9 +5,10 @@ import { AppView } from '../types';
 interface SidebarProps {
   currentView: AppView;
   setView: (view: AppView) => void;
+  onExit?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, onExit }) => {
   const menuItems = [
     { id: AppView.DASHBOARD, label: 'Dashboard', icon: <i className="ph-bold ph-house"></i>, tip: 'Central overview and project status' },
     { id: AppView.PROJECT_VIEW, label: 'Projects', icon: <i className="ph-bold ph-folder-open"></i>, tip: 'Comprehensive project management' },
@@ -25,7 +26,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
     <aside className="w-full lg:w-64 h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-20 shadow-brand-xl lg:shadow-none overflow-y-auto no-scrollbar">
       <div className="p-6 lg:p-8">
         <div className="flex items-center space-x-3 mb-8 lg:mb-12">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black italic shadow-brand-lg">L</div>
+          <div className="w-9 h-9 sm:w-10 sm:h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-brand-lg overflow-hidden">
+            <i className="ph-bold ph-globe text-xl sm:text-2xl animate-spin-slow"></i>
+          </div>
           <div>
              <span className="block text-lg lg:text-xl font-black text-slate-800 dark:text-white tracking-tighter leading-none">LingoPro</span>
              <span className="text-[8px] lg:text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Localization</span>
@@ -52,22 +55,28 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
         </nav>
       </div>
 
-      <div className="mt-auto p-6 lg:p-8 border-t border-slate-50 dark:border-slate-800/50">
-        <div className="bg-slate-50 dark:bg-slate-950 p-4 sm:p-5 rounded-lg sm:rounded-md border border-slate-100 dark:border-slate-800" title="Real-time connectivity health of the Gemini native processing cluster">
-          <p className="text-[8px] sm:text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 sm:mb-3">Node Status</p>
-          <div className="space-y-2 sm:space-y-3">
+      <div className="mt-auto p-6 lg:p-8 border-t border-slate-50 dark:border-slate-800/50 space-y-4">
+        <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-100 dark:border-slate-800" title="Node Connectivity Status">
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                <span className="text-[10px] sm:text-xs font-bold text-slate-700 dark:text-slate-300">Live</span>
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">Node Cluster Live</span>
               </div>
-              <span className="text-[8px] sm:text-[9px] font-mono text-slate-400">12ms</span>
             </div>
-            <div className="h-1 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-               <div className="h-full bg-indigo-600 w-full animate-shimmer"></div>
+            <div className="h-0.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+               <div className="h-full bg-blue-600 w-full animate-shimmer"></div>
             </div>
           </div>
         </div>
+
+        <button 
+          onClick={onExit}
+          className="w-full flex items-center space-x-4 px-4 h-11 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition-colors text-sm font-bold"
+        >
+          <i className="ph-bold ph-sign-out text-xl"></i>
+          <span>Exit Suite</span>
+        </button>
       </div>
     </aside>
   );

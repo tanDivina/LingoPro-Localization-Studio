@@ -1,56 +1,62 @@
 
-import React, { useState } from 'react';
-import { AppView } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import { AppView, SUPPORTED_LANGUAGES } from '../types';
 import { geminiService } from '../services/geminiService';
 
 interface SubtitlingViewProps {
   setView?: (view: AppView) => void;
 }
 
+interface Subtitle {
+  start: string;
+  end: string;
+  text: string;
+}
+
 const SubtitlingView: React.FC<SubtitlingViewProps> = ({ setView }) => {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [subtitles, setSubtitles] = useState<{ start: string; end: string; text: string }[]>([
-    { start: '00:00:01,000', end: '00:00:04,500', text: 'Welcome to the LingoPro Localization Suite global summit.' },
-    { start: '00:00:05,000', end: '00:00:08,000', text: 'We are revolutionizing how content is localized using Gemini 3.' }
-  ]);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
+  const [targetLang, setTargetLang] = useState('English');
   
+  const videoRef = useRef<HTMLVideoElement>(null);
+
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e && e.target && e.target.files) {
-      const files = e.target.files;
-      if (files.length > 0) {
-        const file = files[0];
-        setVideoUrl(URL.createObjectURL(file));
-        setFileName(file.name);
-      }
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      setVideoUrl(URL.createObjectURL(file));
+      setFileName(file.name);
+      setSubtitles([]);
     }
   };
 
+  const loadDemoVideo = () => {
+    setVideoUrl("https://assets.mixkit.co/videos/preview/mixkit-software-developer-working-on-his-laptop-34440-large.mp4");
+    setFileName("Demo_Expert_Cloud_Infrastructure.mp4");
+    setSubtitles([
+      { start: '00:00:00,500', end: '00:00:03,000', text: 'Initiating global synchronization sequence...' },
+      { start: '00:00:03,500', end: '00:00:06,000', text: 'Neural processing nodes are now online and stable.' }
+    ]);
+  };
+
   const handleGenerateSubtitles = async () => {
-    if (!fileName) {
-      alert("Please upload a video first.");
-      return;
-    }
+    if (!fileName) return;
     setIsGenerating(true);
     try {
-      // In a real production app, we would send the actual audio/video data.
-      // Here we simulate the process using the filename to generate relevant mock subtitles.
-      const aiSubtitles = await geminiService.generateSubtitles(fileName, 'English');
+      const aiSubtitles = await geminiService.generateSubtitles(fileName, targetLang);
       if (aiSubtitles && aiSubtitles.length > 0) {
         setSubtitles(aiSubtitles);
-      } else {
-        alert("Failed to generate subtitles. Please try again.");
       }
     } catch (error) {
       console.error("Subtitling error:", error);
-      alert("An error occurred during subtitle generation.");
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const updateSub = (idx: number, field: 'start' | 'end' | 'text', val: string) => {
+  const updateSub = (idx: number, field: keyof Subtitle, val: string) => {
     const updated = [...subtitles];
     updated[idx] = { ...updated[idx], [field]: val };
     setSubtitles(updated);
@@ -58,6 +64,18 @@ const SubtitlingView: React.FC<SubtitlingViewProps> = ({ setView }) => {
 
   const addSub = () => setSubtitles([...subtitles, { start: '00:00:00,000', end: '00:00:00,000', text: '' }]);
   const removeSub = (idx: number) => setSubtitles(subtitles.filter((_, i) => i !== idx));
+
+  const timeToSeconds = (timeStr: string) => {
+    const parts = timeStr.replace(',', '.').split(':');
+    if (parts.length !== 3) return 0;
+    return parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
+  };
+
+  const currentActiveSub = subtitles.find(s => {
+    const start = timeToSeconds(s.start);
+    const end = timeToSeconds(s.end);
+    return currentTime >= start && currentTime <= end;
+  });
 
   const exportSubtitles = (format: 'srt' | 'vtt') => {
     let content = '';
@@ -76,104 +94,106 @@ const SubtitlingView: React.FC<SubtitlingViewProps> = ({ setView }) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `lingopro_subtitles.${format}`;
+    a.download = `LOCALIZED_${fileName.split('.')[0]}.${format}`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-in fade-in duration-500">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in slide-in-from-bottom-6 duration-700 pb-20">
+      {/* Video Preview Area */}
       <div className="lg:col-span-7 space-y-6">
-        <div className="bg-black rounded-2xl aspect-video relative overflow-hidden shadow-2xl group border border-slate-800">
+        <div className="bg-slate-950 rounded-[2.5rem] aspect-video relative overflow-hidden shadow-brand-xl group border border-slate-800">
           {videoUrl ? (
-            <video src={videoUrl} controls className="w-full h-full" />
+            <>
+              <video 
+                ref={videoRef}
+                src={videoUrl} 
+                controls 
+                className="w-full h-full object-contain"
+                onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+              />
+              {currentActiveSub && (
+                <div className="absolute bottom-16 left-0 right-0 px-8 pointer-events-none flex justify-center animate-in fade-in slide-in-from-bottom-2">
+                  <div className="bg-black/60 backdrop-blur-md text-white px-6 py-3 rounded-2xl text-center border border-white/10 max-w-[80%]">
+                    <p className="text-lg font-bold leading-tight drop-shadow-lg">{currentActiveSub.text}</p>
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
-              <i className="ph-bold ph-video-camera-slash text-6xl mb-4"></i>
-              <p className="text-sm font-bold uppercase tracking-widest">No Video Loaded</p>
-              <div className="flex gap-4 mt-6">
-                <button 
-                  onClick={() => setView?.(AppView.DASHBOARD)}
-                  className="px-6 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold hover:bg-slate-700 shadow-xl flex items-center gap-2"
-                >
-                  <i className="ph-bold ph-house"></i>
-                  Home
-                </button>
-                <label className="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold cursor-pointer hover:bg-indigo-700 shadow-xl">
-                  Upload Master Video
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 bg-slate-950/50">
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-8">Studio Awaiting Input</p>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <label className="px-8 py-4 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-blue-700 transition-all">
+                  Upload Visual
                   <input type="file" className="hidden" accept="video/*" onChange={handleVideoUpload} />
                 </label>
+                <button onClick={loadDemoVideo} className="px-8 py-4 bg-slate-800 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all">
+                  Load Demo
+                </button>
               </div>
             </div>
           )}
+          {isGenerating && (
+            <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-xl z-30 flex flex-col items-center justify-center">
+               <div className="w-16 h-16 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mb-6"></div>
+               <h3 className="text-white text-sm font-black uppercase tracking-widest">Multi-Modal Analysis...</h3>
+            </div>
+          )}
         </div>
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800">
-          <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-2">Automated Temporal Analysis</h4>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">LingoPro uses Gemini 3 to automatically generate perfectly timed subtitles from video audio, optimized for localized reading speeds.</p>
+
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-brand-sm flex flex-col sm:flex-row items-center justify-between gap-6">
+          <div className="space-y-1">
+            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Target Locale</h4>
+            <select 
+              className="bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-xl px-4 h-10 text-[10px] font-black uppercase outline-none dark:text-white"
+              value={targetLang}
+              onChange={(e) => setTargetLang(e.target.value)}
+            >
+              {SUPPORTED_LANGUAGES.filter(l => l !== 'Auto-Detect').map(l => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+            </select>
+          </div>
           <button 
             onClick={handleGenerateSubtitles}
             disabled={isGenerating || !fileName}
-            className="w-full py-3 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 font-bold rounded-xl border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all disabled:opacity-50"
+            className="w-full sm:w-auto px-10 py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-brand-xl disabled:opacity-30"
           >
-            {isGenerating ? (
-              <span className="flex items-center justify-center gap-2">
-                <i className="ph ph-spinner animate-spin"></i> Analyzing Video Stream...
-              </span>
-            ) : "Generate Subtitles with Gemini"}
+            Generate AI Subtitles
           </button>
         </div>
       </div>
 
-      <div className="lg:col-span-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col h-[700px]">
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/30">
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => setView?.(AppView.DASHBOARD)}
-              className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"
-              title="Home"
-            >
-              <i className="ph ph-house text-xl"></i>
+      {/* Timeline Editor Area */}
+      <div className="lg:col-span-5 flex flex-col h-[700px] space-y-4">
+        <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-brand-sm flex flex-col h-full overflow-hidden">
+          <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/30">
+            <h4 className="text-[11px] font-black text-slate-800 dark:text-white uppercase tracking-widest">Timeline Sync</h4>
+            <button onClick={addSub} className="w-9 h-9 flex items-center justify-center bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all">
+              <i className="ph-bold ph-plus"></i>
             </button>
-            <span className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-tight">Timeline Editor</span>
           </div>
-          <div className="flex space-x-2">
-            <button onClick={() => exportSubtitles('srt')} title="Download SRT" className="p-1.5 text-slate-400 hover:text-indigo-600"><i className="ph-bold ph-download-simple text-xl"></i></button>
-            <button onClick={() => exportSubtitles('vtt')} title="Download VTT" className="p-1.5 text-slate-400 hover:text-brand-blue"><i className="ph-bold ph-export text-xl"></i></button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
-          {subtitles.map((sub, idx) => (
-            <div key={idx} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-100 dark:border-slate-800 space-y-3">
-              <div className="flex items-center space-x-2">
-                <input type="text" value={sub.start} onChange={(e) => updateSub(idx, 'start', e.target.value)} className="bg-white dark:bg-slate-800 text-[10px] font-mono border border-slate-200 rounded px-2 py-1 w-24 outline-none" />
-                <span className="text-slate-400">→</span>
-                <input type="text" value={sub.end} onChange={(e) => updateSub(idx, 'end', e.target.value)} className="bg-white dark:bg-slate-800 text-[10px] font-mono border border-slate-200 rounded px-2 py-1 w-24 outline-none" />
-                <div className="flex-1"></div>
-                <button onClick={() => removeSub(idx)} className="text-slate-300 hover:text-red-500"><i className="ph-bold ph-trash text-lg"></i></button>
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 no-scrollbar">
+            {subtitles.map((sub, idx) => (
+              <div key={idx} className={`p-5 rounded-3xl border transition-all space-y-4 ${currentTime >= timeToSeconds(sub.start) && currentTime <= timeToSeconds(sub.end) ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 dark:bg-slate-950'}`}>
+                <div className="flex items-center space-x-2">
+                   <input type="text" value={sub.start} onChange={(e) => updateSub(idx, 'start', e.target.value)} className="bg-white dark:bg-slate-900 border rounded-lg px-2 py-1 text-[10px] font-mono w-24 outline-none" />
+                   <span className="text-slate-300">→</span>
+                   <input type="text" value={sub.end} onChange={(e) => updateSub(idx, 'end', e.target.value)} className="bg-white dark:bg-slate-900 border rounded-lg px-2 py-1 text-[10px] font-mono w-24 outline-none" />
+                   <div className="flex-1" />
+                   <button onClick={() => removeSub(idx)} className="text-slate-300 hover:text-red-500"><i className="ph-bold ph-trash-simple text-lg"></i></button>
+                </div>
+                <textarea value={sub.text} onChange={(e) => updateSub(idx, 'text', e.target.value)} className="w-full bg-white dark:bg-slate-900 border rounded-2xl p-4 text-xs font-medium resize-none outline-none focus:border-blue-500" rows={2} />
               </div>
-              <textarea value={sub.text} onChange={(e) => updateSub(idx, 'text', e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 rounded-lg p-3 text-sm resize-none outline-none focus:border-indigo-500 dark:text-slate-100" rows={2} />
-            </div>
-          ))}
-          <button onClick={addSub} className="w-full py-2 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-xl text-slate-400 text-xs font-bold hover:border-indigo-300 hover:text-indigo-500">+ Add Segment</button>
-        </div>
-        <div className="p-6 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between gap-4">
-          <div className="flex-1">
-             <button 
-              onClick={() => exportSubtitles('srt')} 
-              className="w-full py-3.5 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-indigo-100 dark:shadow-none hover:bg-indigo-700 transition-all flex items-center justify-center space-x-2"
-            >
-              <i className="ph-bold ph-file-text text-lg"></i>
-              <span>Export SRT</span>
-            </button>
+            ))}
           </div>
-          <div className="flex-1">
-            <button 
-              onClick={() => exportSubtitles('vtt')} 
-              className="w-full py-3.5 bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center space-x-2"
-            >
-              <i className="ph-bold ph-broadcast text-lg"></i>
-              <span>Export VTT</span>
-            </button>
+
+          <div className="p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 flex items-center gap-4">
+            <button onClick={() => exportSubtitles('srt')} disabled={subtitles.length === 0} className="flex-1 h-12 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-brand-xl disabled:opacity-30">Export SRT</button>
+            <button onClick={() => exportSubtitles('vtt')} disabled={subtitles.length === 0} className="flex-1 h-12 bg-white text-slate-800 border rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-brand-lg disabled:opacity-30">Export VTT</button>
           </div>
         </div>
       </div>

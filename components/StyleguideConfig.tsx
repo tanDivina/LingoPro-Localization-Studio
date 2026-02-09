@@ -85,7 +85,7 @@ const StyleguideConfig: React.FC<StyleguideConfigProps> = ({ onClose, onRulesUpd
                 />
                 <button 
                   onClick={addRule}
-                  className="w-full h-[44px] bg-indigo-600 text-white font-black uppercase tracking-widest text-[10px] rounded-xl shadow-brand-md"
+                  className="w-full h-[44px] bg-blue-600 text-white font-black uppercase tracking-widest text-[10px] rounded-xl shadow-brand-md"
                 >
                   Append Rule
                 </button>

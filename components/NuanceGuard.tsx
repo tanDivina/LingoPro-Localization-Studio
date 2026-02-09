@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { geminiService } from '../services/geminiService';
-import { StyleguideRule, StyleguideReport, AppView } from '../types';
+import { StyleguideRule, AppView, LocalizationAsset, XliffSegment } from '../types';
 import StyleguideConfig from './StyleguideConfig';
 import { safeLocalStorage } from '../utils/storage';
 
@@ -12,6 +12,12 @@ interface Insight {
   suggestion: string;
 }
 
+interface NuanceResults {
+  score: number;
+  insights: Insight[];
+  optimizedText: string;
+}
+
 interface NuanceGuardProps {
   setView?: (view: AppView) => void;
 }
@@ -20,12 +26,25 @@ const NuanceGuard: React.FC<NuanceGuardProps> = ({ setView }) => {
   const [text, setText] = useState('');
   const [culture, setCulture] = useState('Japanese (Global Business)');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [results, setResults] = useState<{ score: number; insights: Insight[] } | null>(null);
+  const [results, setResults] = useState<NuanceResults | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [showAssetPicker, setShowAssetPicker] = useState(false);
+  const [availableAssets, setAvailableAssets] = useState<LocalizationAsset[]>([]);
 
   // Styleguide Integration
   const [brandGuardActive, setBrandGuardActive] = useState(true);
   const [showStyleguideConfig, setShowStyleguideConfig] = useState(false);
   const [styleguideRules, setStyleguideRules] = useState<StyleguideRule[]>([]);
+
+  const presets = [
+    "Japanese (Global Business)",
+    "USA (Gen-Z Social Media)",
+    "German (Formal B2B)",
+    "Brazilian (Informal Casual)",
+    "UAE (Modern High-Luxury)",
+    "Korean (Gaming Community)",
+    "French (Academic/Literary)"
+  ];
 
   useEffect(() => {
     const savedStyleguide = safeLocalStorage.getItem('lingopro_styleguide');
@@ -33,6 +52,35 @@ const NuanceGuard: React.FC<NuanceGuardProps> = ({ setView }) => {
       try { setStyleguideRules(JSON.parse(savedStyleguide)); } catch (e) {}
     }
   }, []);
+
+  const loadDemo = () => {
+    setText("Listen, we need to stop beating around the bush. This project is a total train wreck and we need to pull the plug immediately before we lose our shirts. I'm going to give it to you straight: if we don't pivot now, we're dead in the water. No more sugar-coating.");
+    setCulture("Japanese (Traditional Corporate)");
+    setResults(null);
+  };
+
+  const openAssetPicker = () => {
+    const saved = safeLocalStorage.getItem('lingopro_assets');
+    if (saved) {
+      try {
+        setAvailableAssets(JSON.parse(saved));
+        setShowAssetPicker(true);
+      } catch (e) {}
+    } else {
+      alert("No workspace assets found in local memory.");
+    }
+  };
+
+  const importAssetContent = (asset: LocalizationAsset) => {
+    const targetMatch = asset.content.match(/<target[^>]*>(.*?)<\/target>/g);
+    if (targetMatch && targetMatch.length > 0) {
+      const extracted = targetMatch.map(m => m.replace(/<\/?target[^>]*>/g, '')).filter(t => t.trim().length > 0).join('\n\n');
+      setText(extracted);
+    } else {
+      setText(asset.content);
+    }
+    setShowAssetPicker(false);
+  };
 
   const handleAnalyze = async () => {
     if (!text) return;
@@ -42,12 +90,9 @@ const NuanceGuard: React.FC<NuanceGuardProps> = ({ setView }) => {
       const raw = await geminiService.analyzeNuance(text, culture);
       const parsed = JSON.parse(raw || '{}');
       
-      let insights: Insight[] = [
-        { category: 'Tone', message: 'The directness of this sentence may come across as aggressive in traditional corporate culture.', severity: 'Medium', suggestion: 'Consider using "Desu/Masu" forms or softening with "I believe".' },
-        { category: 'Idiom', message: '"Hitting the nail on the head" doesn\'t have a direct equivalent here.', severity: 'Low', suggestion: 'Use "Seikai" (Correct/Right answer).' },
-      ];
-
+      let insights: Insight[] = parsed.insights || [];
       let score = parsed.nuance_score || 85;
+      let optimizedText = parsed.optimized_text || text;
 
       if (brandGuardActive && styleguideRules.length > 0) {
         const complianceReport = await geminiService.checkStyleguideCompliance(text, 'Target', styleguideRules);
@@ -64,7 +109,7 @@ const NuanceGuard: React.FC<NuanceGuardProps> = ({ setView }) => {
         score = Math.floor((score + complianceReport.score) / 2);
       }
 
-      setResults({ score, insights });
+      setResults({ score, insights, optimizedText });
     } catch (e) {
       console.error(e);
       alert('Analysis failed. Ensure valid text input.');
@@ -73,105 +118,291 @@ const NuanceGuard: React.FC<NuanceGuardProps> = ({ setView }) => {
     }
   };
 
+  const downloadReport = () => {
+    if (!results) return;
+
+    const reportContent = `
+LINGOPRO EXPERT CULTURAL DOSSIER
+================================
+Date: ${new Date().toLocaleString()}
+Target Persona: ${culture}
+Resonance Score: ${results.score}%
+
+--------------------------------
+MASTER CONTENT (SOURCE):
+--------------------------------
+${text}
+
+--------------------------------
+OPTIMIZED CONTENT (SUGGESTED):
+--------------------------------
+${results.optimizedText}
+
+--------------------------------
+CULTURAL FINDINGS & AUDITS:
+--------------------------------
+${results.insights.map(i => `[${i.category.toUpperCase()}] Severity: ${i.severity}
+Issue: ${i.message}
+Recommendation: ${i.suggestion}
+`).join('\n---\n')}
+
+Generated by Nuance Guard v3.1 Engine.
+    `.trim();
+
+    const blob = new Blob([reportContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Cultural_Audit_${culture.replace(/\s+/g, '_')}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in duration-500">
-      <div className="lg:col-span-7 space-y-6">
-        <div className="bg-white dark:bg-slate-900 p-8 rounded-md border border-slate-200 dark:border-slate-800 shadow-brand-sm">
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center gap-3">
-              <button 
-                onClick={() => setView?.(AppView.DASHBOARD)}
-                className="w-10 h-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl hover:text-indigo-600 transition-all shadow-brand-sm flex items-center justify-center"
-                title="Home"
-              >
-                <i className="ph-bold ph-house"></i>
-              </button>
-              <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Content for Cultural Scan</h3>
-            </div>
-            <div className="flex items-center space-x-2">
-               <button 
-                 onClick={() => setBrandGuardActive(!brandGuardActive)}
-                 className={`flex items-center space-x-2 px-3 py-1.5 rounded-sm border transition-all min-h-[44px] ${
-                   brandGuardActive ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200'
-                 }`}
-               >
-                 <i className={`ph-bold ${brandGuardActive ? 'ph-shield-check' : 'ph-shield'} text-lg`}></i>
-                 <span className="text-[10px] font-black uppercase tracking-widest">Brand Guard</span>
-               </button>
-               <button onClick={() => setShowStyleguideConfig(true)} className="p-3 text-slate-400 hover:text-indigo-600 min-h-[44px] min-w-[44px] flex items-center justify-center" aria-label="Configure Styleguide">
-                  <i className="ph-bold ph-gear-six text-xl"></i>
-               </button>
-            </div>
-          </div>
-          <textarea 
-            className="w-full h-64 p-6 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-md outline-none text-sm leading-relaxed transition-all focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 dark:text-slate-200 resize-none"
-            placeholder="Paste text for validation..."
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
-          <div className="mt-6 flex flex-col sm:flex-row items-center gap-4">
-             <div className="flex-1 flex items-center space-x-3 bg-slate-100 dark:bg-slate-800 px-4 h-[48px] rounded-md w-full border border-slate-200 dark:border-slate-700">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Culture</span>
-                <input 
-                  type="text" 
-                  value={culture} 
-                  onChange={(e) => setCulture(e.target.value)}
-                  className="bg-transparent border-none text-sm font-bold outline-none flex-1 dark:text-slate-100 focus:ring-0"
-                />
-             </div>
-             <button 
-               onClick={handleAnalyze}
-               disabled={isAnalyzing || !text}
-               className="h-[48px] px-10 bg-indigo-600 text-white font-black uppercase tracking-widest text-[11px] rounded-md shadow-brand-lg hover:bg-indigo-700 disabled:bg-slate-300 transition-all transform active:scale-95 w-full sm:w-auto"
-             >
-               {isAnalyzing ? 'Analyzing...' : 'Execute Scan'}
-             </button>
-          </div>
+    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+      {/* Asset Picker Modal */}
+      {showAssetPicker && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl animate-in fade-in duration-300">
+           <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[3rem] p-10 shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[80vh]">
+              <div className="flex justify-between items-center mb-8">
+                 <h3 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">Import from Workspace</h3>
+                 <button onClick={() => setShowAssetPicker(false)} className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                    <i className="ph-bold ph-x"></i>
+                 </button>
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-3 pr-2 no-scrollbar">
+                 {availableAssets.map(asset => (
+                   <button 
+                    key={asset.id} 
+                    onClick={() => importAssetContent(asset)}
+                    className="w-full text-left p-5 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-blue-500 hover:bg-blue-50/10 transition-all flex items-center space-x-4 group"
+                   >
+                      <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                        <i className={`ph-bold ${asset.type === 'docx' ? 'ph-file-doc' : 'ph-file'}`}></i>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{asset.name}</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{asset.type} • {(asset.size / 1024).toFixed(1)} KB</p>
+                      </div>
+                      <i className="ph-bold ph-caret-right text-slate-300 group-hover:text-blue-500"></i>
+                   </button>
+                 ))}
+                 {availableAssets.length === 0 && (
+                   <div className="py-20 text-center opacity-20 flex flex-col items-center">
+                      <i className="ph-bold ph-database text-5xl mb-4"></i>
+                      <p className="text-sm font-black uppercase tracking-widest">Memory Cache Empty</p>
+                   </div>
+                 )}
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Help Overlay */}
+      {showHelp && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl animate-in fade-in duration-300">
+           <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-[3rem] p-10 shadow-2xl border border-slate-200 dark:border-slate-800">
+              <h3 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tighter mb-4">Culture Intelligence</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
+                Nuance Guard uses Gemini's deep cultural training to evaluate text against specific target personas. 
+                <br /><br />
+                The <strong>Culture Field</strong> is fully customizable. You can define specific age groups, regions, or social contexts (e.g., "Spanish (Medellín Youth)" or "Arabic (Dubai Tech Policy)").
+              </p>
+              <button onClick={() => setShowHelp(false)} className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-brand-xl">Got it</button>
+           </div>
+        </div>
+      )}
+
+      {/* Simplified Toolbar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-brand-sm gap-4">
+        <div className="flex items-center space-x-3">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] px-2">Cultural Engine v3.1</span>
+          <button 
+            onClick={() => setShowHelp(true)}
+            className="w-8 h-8 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-xl flex items-center justify-center text-xs hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+          >
+            ?
+          </button>
+        </div>
+        <div className="flex items-center space-x-2">
+           <button 
+             onClick={loadDemo}
+             className="h-10 px-4 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-blue-100 dark:border-blue-800 hover:bg-blue-600 hover:text-white transition-all shadow-brand-sm flex items-center justify-center space-x-2"
+           >
+             <i className="ph-bold ph-magic-wand"></i>
+             <span>Try Demo</span>
+           </button>
+           <button 
+             onClick={() => setBrandGuardActive(!brandGuardActive)}
+             className={`flex items-center h-10 px-4 rounded-xl border transition-all space-x-2 shadow-brand-sm ${
+               brandGuardActive ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-white dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+             }`}
+           >
+             <i className={`ph-bold ${brandGuardActive ? 'ph-shield-check' : 'ph-shield'} text-lg`}></i>
+             <span className="text-[10px] font-black uppercase tracking-widest">Brand Guard</span>
+           </button>
+           <button 
+            onClick={() => setShowStyleguideConfig(true)} 
+            className="w-10 h-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-400 hover:text-blue-600 transition-all shadow-brand-sm flex items-center justify-center"
+           >
+              <i className="ph-bold ph-gear-six text-xl"></i>
+           </button>
         </div>
       </div>
 
-      <div className="lg:col-span-5 space-y-6">
-        <div className="bg-white dark:bg-slate-900 p-8 rounded-md border border-slate-200 dark:border-slate-800 shadow-brand-sm flex flex-col items-center justify-center text-center">
-          <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">Alignment Score</h4>
-          <div className="relative w-32 h-32 flex items-center justify-center">
-             <svg className="w-full h-full transform -rotate-90">
-                <circle cx="64" cy="64" r="60" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-slate-100 dark:text-slate-800" />
-                <circle 
-                  cx="64" cy="64" r="60" stroke="currentColor" strokeWidth="8" fill="transparent" 
-                  strokeDasharray={376.8}
-                  strokeDashoffset={376.8 - (376.8 * (results?.score || 0) / 100)}
-                  className={`${(results?.score || 0) > 80 ? 'text-emerald-500' : (results?.score || 0) > 60 ? 'text-amber-500' : 'text-slate-200' } transition-all duration-1000`} 
-                />
-             </svg>
-             <span className="absolute text-3xl font-black text-slate-800 dark:text-slate-100">{results?.score || '--'}</span>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+        <div className="lg:col-span-7 space-y-8">
+          <div className="bg-white dark:bg-slate-900 p-8 sm:p-10 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-brand-sm space-y-8">
+            <div className="space-y-4">
+               <div className="flex justify-between items-center">
+                  <div className="flex items-center space-x-3">
+                     <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest">Master Content Scan</h3>
+                     <button 
+                      onClick={openAssetPicker}
+                      className="w-8 h-8 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-blue-600 rounded-lg flex items-center justify-center transition-all shadow-brand-sm border border-slate-100 dark:border-slate-700"
+                      title="Load text from workspace memory"
+                     >
+                       <i className="ph-bold ph-folder-open"></i>
+                     </button>
+                  </div>
+                  <span className="text-[10px] font-black text-slate-300 uppercase">{text.length} Characters</span>
+               </div>
+               <textarea 
+                className="w-full h-72 p-6 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-[2rem] outline-none text-sm leading-relaxed transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 dark:text-slate-200 resize-none font-medium"
+                placeholder="Paste localized content for cultural suitability validation..."
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+              />
+            </div>
+            
+            <div className="space-y-6">
+               <div className="space-y-3">
+                  <div className="flex items-center justify-between px-2">
+                    <h4 className="text-[10px] font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">Target Cultural Persona</h4>
+                    <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest animate-pulse">Fully Customizable</span>
+                  </div>
+                  <div className="flex items-center space-x-3 bg-slate-50 dark:bg-slate-950 px-5 h-14 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-inner group transition-all focus-within:border-blue-500">
+                    <i className="ph-bold ph-globe-hemisphere-east text-blue-500"></i>
+                    <input 
+                      type="text" 
+                      value={culture} 
+                      onChange={(e) => setCulture(e.target.value)}
+                      className="bg-transparent border-none text-sm font-bold outline-none flex-1 dark:text-slate-100 focus:ring-0 placeholder:text-slate-400"
+                      placeholder="e.g. Spanish (Colombian Gen-Z Social Media)"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 px-2 italic">
+                    Type any specific audience context above. Gemini adapts its logic to the region, age, or social dynamic you define.
+                  </p>
+                  <div className="flex flex-wrap gap-2 px-1 pt-1">
+                    {presets.map(p => (
+                      <button 
+                        key={p} 
+                        onClick={() => setCulture(p)}
+                        className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${culture === p ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-blue-50'}`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+               </div>
+
+               <button 
+                 onClick={handleAnalyze}
+                 disabled={isAnalyzing || !text}
+                 className="h-16 w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white font-black uppercase tracking-[0.2em] text-[11px] rounded-2xl shadow-brand-xl hover:-translate-y-1 transition-all active:scale-95 disabled:opacity-30 flex items-center justify-center space-x-3"
+               >
+                 {isAnalyzing ? (
+                   <>
+                     <i className="ph-bold ph-spinner animate-spin"></i>
+                     <span>Deep Cultural Scan...</span>
+                   </>
+                 ) : 'Execute Cultural Scan'}
+               </button>
+            </div>
           </div>
+
+          {results && (
+            <div className="bg-emerald-600 p-8 sm:p-10 rounded-[3rem] text-white shadow-brand-xl space-y-6 animate-in slide-in-from-top-4 duration-500">
+              <div className="flex justify-between items-center">
+                 <h4 className="text-[10px] font-black uppercase tracking-[0.3em]">Perfected Output</h4>
+                 <button 
+                  onClick={() => setText(results.optimizedText)}
+                  className="text-[9px] font-black uppercase tracking-widest bg-white/20 hover:bg-white/40 px-3 py-1 rounded-lg transition-all"
+                 >
+                  Apply to Editor
+                 </button>
+              </div>
+              <p className="text-sm font-medium leading-relaxed italic">"{results.optimizedText}"</p>
+              <div className="pt-4 border-t border-white/20 flex justify-between items-center">
+                 <p className="text-[9px] font-black uppercase opacity-60">Optimized for Resonance</p>
+                 <button 
+                  onClick={downloadReport}
+                  className="flex items-center space-x-2 bg-white text-emerald-700 px-6 h-10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl"
+                 >
+                   <i className="ph-bold ph-download-simple"></i>
+                   <span>Export Expert Dossier</span>
+                 </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="bg-white dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-800 shadow-brand-sm overflow-hidden flex-1 flex flex-col min-h-[400px]">
-          <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 flex justify-between items-center">
-            <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Diarized Insights</h4>
+        <div className="lg:col-span-5 space-y-8">
+          <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-brand-sm flex flex-col items-center justify-center text-center">
+            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Alignment Matrix</h4>
+            <div className="relative w-40 h-40 flex items-center justify-center">
+               <svg className="w-full h-full transform -rotate-90">
+                  <circle cx="80" cy="80" r="75" stroke="currentColor" strokeWidth="10" fill="transparent" className="text-slate-50 dark:text-slate-800" />
+                  <circle 
+                    cx="80" cy="80" r="75" stroke="currentColor" strokeWidth="10" fill="transparent" 
+                    strokeDasharray={471}
+                    strokeDashoffset={471 - (471 * (results?.score || 0) / 100)}
+                    className={`${(results?.score || 0) > 85 ? 'text-emerald-500' : (results?.score || 0) > 60 ? 'text-amber-500' : 'text-slate-200' } transition-all duration-1000`} 
+                  />
+               </svg>
+               <span className="absolute text-4xl font-black text-slate-900 dark:text-white tracking-tighter">{results?.score || '--'}</span>
+            </div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-6">Resonance Confidence Score</p>
           </div>
-          <div className="p-6 space-y-4 overflow-y-auto no-scrollbar">
-             {results ? results.insights.map((insight, i) => (
-               <div key={i} className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-md animate-in slide-in-from-right duration-500">
-                  <div className="flex justify-between items-center mb-2">
-                     <span className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase ${
-                       insight.category === 'Brand' ? 'bg-emerald-100 text-emerald-700' :
-                       insight.severity === 'High' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                     }`}>{insight.category} • {insight.severity}</span>
+
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-brand-sm overflow-hidden flex flex-col h-[500px]">
+            <div className="p-8 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex justify-between items-center">
+              <h4 className="text-[11px] font-black text-slate-800 dark:text-white uppercase tracking-widest">Cultural Findings</h4>
+              {results && (
+                <button onClick={downloadReport} className="text-slate-400 hover:text-blue-600 transition-colors" title="Download Audit">
+                  <i className="ph-bold ph-file-arrow-down text-xl"></i>
+                </button>
+              )}
+            </div>
+            <div className="flex-1 p-6 space-y-4 overflow-y-auto no-scrollbar">
+               {results ? results.insights.map((insight, i) => (
+                 <div key={i} className="p-6 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-3xl animate-in slide-in-from-bottom-2 duration-500 space-y-3 shadow-sm">
+                    <div className="flex justify-between items-center">
+                       <span className={`text-[9px] px-2.5 py-1 rounded-lg font-black uppercase tracking-widest ${
+                         insight.category === 'Brand' ? 'bg-blue-600 text-white' :
+                         insight.severity === 'High' ? 'bg-red-500 text-white' : 'bg-amber-100 text-amber-700'
+                       }`}>{insight.category} • {insight.severity}</span>
+                    </div>
+                    <p className="text-sm text-slate-700 dark:text-slate-300 font-bold leading-relaxed">{insight.message}</p>
+                    {insight.suggestion && (
+                      <div className="pt-3 border-t border-slate-200/50 dark:border-slate-800">
+                         <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Expert Pivot</p>
+                         <p className="text-xs text-slate-500 dark:text-slate-400 italic">"{insight.suggestion}"</p>
+                      </div>
+                    )}
+                 </div>
+               )) : isAnalyzing ? (
+                  <div className="space-y-6">
+                    {[1,2,3].map(i => <div key={i} className="h-32 w-full skeleton rounded-[2rem]"></div>)}
                   </div>
-                  <p className="text-xs text-slate-700 dark:text-slate-300 font-bold mb-3 leading-relaxed">{insight.message}</p>
-               </div>
-             )) : isAnalyzing ? (
-                <div className="py-20 space-y-4">
-                  {[1,2,3].map(i => <div key={i} className="h-20 w-full skeleton rounded-md"></div>)}
-                </div>
-             ) : (
-               <div className="py-20 flex flex-col items-center opacity-20 text-slate-400">
-                  <i className="ph-bold ph-eye text-6xl"></i>
-                  <p className="text-xs font-black mt-4 uppercase tracking-widest">Awaiting Analysis</p>
-               </div>
-             )}
+               ) : (
+                 <div className="h-full flex flex-col items-center justify-center opacity-20 text-center p-12">
+                    <i className="ph-bold ph-eye text-6xl mb-6"></i>
+                    <p className="text-sm font-black uppercase tracking-widest">Awaiting Analysis Stream</p>
+                 </div>
+               )}
+            </div>
           </div>
         </div>
       </div>

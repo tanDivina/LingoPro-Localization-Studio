@@ -2,10 +2,11 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import JSZip from 'jszip';
 import { geminiService } from '../services/geminiService';
-import { XliffSegment, SUPPORTED_LANGUAGES, LocalizationAsset, GlossaryTerm, StyleguideRule, AppView, TranslationMemoryEntry } from '../types';
+import { XliffSegment, SUPPORTED_LANGUAGES, LocalizationAsset, GlossaryTerm, StyleguideRule, AppView } from '../types';
 import { safeLocalStorage } from '../utils/storage';
 import GlossaryModal from './GlossaryModal';
 import StyleguideConfig from './StyleguideConfig';
+import TMManagerModal from './TMManagerModal';
 
 const parseSegmentsFromXliff = (content: string, fileName?: string): XliffSegment[] => {
   try {
@@ -29,20 +30,13 @@ const parseSegmentsFromXliff = (content: string, fileName?: string): XliffSegmen
       const isApproved = ['final', 'translated', 'signed-off', 'reviewed'].includes(internalState.toLowerCase());
       
       extracted.push({ 
-        id, 
-        source, 
-        target, 
-        status: isApproved ? 'approved' : (target ? 'translated' : 'untranslated'), 
-        internalState, 
-        isTranslatable: true, 
-        fileName,
-        matchType: target ? 'Manual' : undefined
+        id, source, target, 
+        status: isApproved ? 'human_verified' : (target ? 'machine_translated' : 'untranslated'), 
+        isTranslatable: true, fileName
       });
     });
     return extracted;
-  } catch (err) {
-    return [];
-  }
+  } catch (err) { return []; }
 };
 
 const parseSegmentsFromDocxXml = (xmlContent: string, fileName?: string): XliffSegment[] => {
@@ -51,29 +45,11 @@ const parseSegmentsFromDocxXml = (xmlContent: string, fileName?: string): XliffS
     const xmlDoc = parser.parseFromString(xmlContent, "text/xml");
     const textNodes = Array.from(xmlDoc.getElementsByTagName('w:t'));
     return textNodes.map((node, i): XliffSegment => ({
-      id: `w-seg-${i}`,
-      source: node.textContent || "",
-      target: "",
-      status: 'untranslated',
-      isTranslatable: true,
-      fileName
+      id: `w-seg-${i}`, source: node.textContent || "", target: "", 
+      status: 'untranslated', isTranslatable: true, fileName
     })).filter(s => s.source.trim().length > 0);
-  } catch (err) {
-    return [];
-  }
+  } catch (err) { return []; }
 };
-
-interface SourceQualityIssue {
-  type: string;
-  original: string;
-  suggestion: string;
-  explanation: string;
-}
-
-interface SourceQualityReport {
-  overall_score: number;
-  issues: SourceQualityIssue[];
-}
 
 interface FileTranslatorProps {
   setView?: (view: AppView) => void;
@@ -81,53 +57,34 @@ interface FileTranslatorProps {
 
 const FileTranslator: React.FC<FileTranslatorProps> = ({ setView }) => {
   const [isTranslating, setIsTranslating] = useState(false);
-  const [isAnalyzingQuality, setIsAnalyzingQuality] = useState(false);
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
-  const [qualityReports, setQualityReports] = useState<Record<string, SourceQualityReport>>({});
   const [sourceLang, setSourceLang] = useState('English');
   const [targetLang, setTargetLang] = useState('Spanish');
   const [assets, setAssets] = useState<LocalizationAsset[]>([]);
   const [activeAssetId, setActiveAssetId] = useState<string | null>(null);
   const [segments, setSegments] = useState<XliffSegment[]>([]);
-  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+  const [filterMode, setFilterMode] = useState<'All' | 'Low Confidence' | 'Unverified'>('All');
   const [glossary, setGlossary] = useState<GlossaryTerm[]>([]);
   const [styleguideRules, setStyleguideRules] = useState<StyleguideRule[]>([]);
   const [translationMemory, setTranslationMemory] = useState<Record<string, string>>({});
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isExporting, setIsExporting] = useState<'docx' | 'xliff' | null>(null);
+  const [isBrandGuardActive, setIsBrandGuardActive] = useState(true);
 
-  // Expert Modals
   const [showGlossary, setShowGlossary] = useState(false);
   const [showStyleguide, setShowStyleguide] = useState(false);
+  const [showTmManager, setShowTmManager] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const segmentRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
-
   const activeAsset = useMemo(() => assets.find(a => a.id === activeAssetId), [assets, activeAssetId]);
 
   useEffect(() => {
-    // Load persisted data
     const savedAssets = safeLocalStorage.getItem('lingopro_assets');
-    if (savedAssets) {
-      try {
-        const parsed = JSON.parse(savedAssets);
-        setAssets(parsed);
-        if (parsed.length > 0 && !activeAssetId) setActiveAssetId(parsed[0].id);
-      } catch (e) {}
-    }
+    if (savedAssets) try { setAssets(JSON.parse(savedAssets)); } catch (e) {}
     const savedGlossary = safeLocalStorage.getItem('lingopro_glossary');
-    if (savedGlossary) {
-      try { setGlossary(JSON.parse(savedGlossary)); } catch (e) {}
-    }
+    if (savedGlossary) try { setGlossary(JSON.parse(savedGlossary)); } catch (e) {}
     const savedRules = safeLocalStorage.getItem('lingopro_styleguide');
-    if (savedRules) {
-      try { setStyleguideRules(JSON.parse(savedRules)); } catch (e) {}
-    }
+    if (savedRules) try { setStyleguideRules(JSON.parse(savedRules)); } catch (e) {}
     const savedTm = safeLocalStorage.getItem('lingopro_tm');
-    if (savedTm) {
-      try { setTranslationMemory(JSON.parse(savedTm)); } catch (e) {}
-    }
+    if (savedTm) try { setTranslationMemory(JSON.parse(savedTm)); } catch (e) {}
   }, []);
 
   const saveAssets = (updated: LocalizationAsset[]) => {
@@ -135,473 +92,449 @@ const FileTranslator: React.FC<FileTranslatorProps> = ({ setView }) => {
     safeLocalStorage.setItem('lingopro_assets', JSON.stringify(updated));
   };
 
-  const saveTm = (source: string, target: string) => {
-    const updatedTm = { ...translationMemory, [source]: target };
-    setTranslationMemory(updatedTm);
-    safeLocalStorage.setItem('lingopro_tm', JSON.stringify(updatedTm));
+  const saveTM = (updated: Record<string, string>) => {
+    setTranslationMemory(updated);
+    safeLocalStorage.setItem('lingopro_tm', JSON.stringify(updated));
+  };
+
+  const loadDemo = () => {
+    const demoContent = "LingoPro isn’t just another translation tool; it’s a high-performance production environment that consolidates everything a linguist needs. Our processing pipeline goes beyond simple translation by integrating your translation memories and glossaries directly with your brand’s style guide. While our file translator protects the integrity of complex layouts in DOCX and XLIFF formats, the system automatically cross-references every segment against your specific brand voice. You no longer need to toggle between documents—LingoPro keeps all your instructions in one cohesive view.";
+    
+    const newAsset: LocalizationAsset = {
+      id: `demo-${Date.now()}`,
+      name: "Expert_LingoPro_Overview.txt",
+      type: "txt",
+      content: demoContent,
+      size: demoContent.length,
+      status: 'pending'
+    };
+
+    const nextAssets = [...assets, newAsset];
+    saveAssets(nextAssets);
+    setActiveAssetId(newAsset.id);
+
+    // Manually trigger segment parsing for plain text demo
+    const demoSegments: XliffSegment[] = demoContent.split('. ').map((sentence, i) => ({
+      id: `demo-seg-${i}`,
+      source: sentence.endsWith('.') ? sentence : `${sentence}.`,
+      target: "",
+      status: 'untranslated',
+      isTranslatable: true,
+      fileName: newAsset.name
+    }));
+    setSegments(demoSegments);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    setIsSyncing(true);
+    if (!e.target.files?.length) return;
+    const file = e.target.files[0];
+    const extension = file.name.split('.').pop()?.toLowerCase() || 'txt';
+    
+    let content = "";
+    let finalType = extension;
 
-    const newAssets: LocalizationAsset[] = [];
-    for (const file of Array.from(files) as File[]) {
-      const extension = file.name.split('.').pop()?.toLowerCase();
-      let content = "";
-      try {
-        if (['xliff', 'xlf', 'xlz', 'docx'].includes(extension || '')) {
-          const binaryData = await file.arrayBuffer();
-          const zip = new JSZip();
-          if (extension === 'docx') {
-             const loadedZip = await zip.loadAsync(binaryData);
-             const docFile = loadedZip.files['word/document.xml'];
-             content = docFile ? await docFile.async('text') : "";
-          } else {
-             content = await file.text();
-          }
-        } else if (extension === 'pdf') {
-          content = "PDF CONTENT (SIMULATED): This document contains expert-level security protocols and regional compliance standards for global deployment. [MARKER_001] Security measures must be audited monthly.";
-        } else {
-          content = await file.text();
-        }
-        newAssets.push({ id: `${Date.now()}-${Math.random()}`, name: file.name, type: extension || 'txt', content, size: file.size, status: 'pending' });
-      } catch (err) {
-        console.error("Upload failed:", file.name, err);
+    if (extension === 'docx') {
+      const zip = await JSZip.loadAsync(file);
+      content = await zip.file("word/document.xml")?.async("string") || "";
+    } else if (extension === 'xlz') {
+      const zip = await JSZip.loadAsync(file);
+      const xlfFile = Object.keys(zip.files).find(name => name.endsWith('.xlf') || name.endsWith('.xliff'));
+      if (xlfFile) {
+        content = await zip.file(xlfFile)!.async("string");
+        finalType = 'xliff';
+      } else {
+        alert("XLZ archive contains no recognizable XLIFF data.");
+        return;
       }
+    } else {
+      content = await file.text();
     }
 
-    const updatedAssets = [...assets, ...newAssets];
-    saveAssets(updatedAssets);
-    if (!activeAssetId && updatedAssets.length > 0) setActiveAssetId(updatedAssets[0].id);
-    setIsSyncing(false);
+    const newAsset: LocalizationAsset = {
+      id: Date.now().toString(),
+      name: file.name,
+      type: finalType,
+      content,
+      size: file.size,
+      status: 'pending'
+    };
+
+    const nextAssets = [...assets, newAsset];
+    saveAssets(nextAssets);
+    setActiveAssetId(newAsset.id);
   };
 
   const updateSegmentTarget = (id: string, newTarget: string) => {
-    setSegments(prev => prev.map(s => s.id === id ? { ...s, target: newTarget, status: (newTarget ? 'translated' : 'untranslated'), matchType: 'Manual' } : s));
+    setSegments(prev => prev.map(s => s.id === id ? { 
+      ...s, target: newTarget, 
+      status: 'machine_translated' as const,
+      matchType: 'Manual' as const 
+    } : s));
   };
 
-  const toggleApproveSegment = (id: string) => {
+  const verifySegment = (id: string) => {
     const segment = segments.find(s => s.id === id);
     if (!segment) return;
-
-    const newStatus = segment.status === 'approved' ? 'translated' : 'approved';
-    if (newStatus === 'approved' && segment.target) {
-      saveTm(segment.source, segment.target);
+    const isNowVerified = segment.status !== 'human_verified';
+    if (isNowVerified && segment.target) {
+      const nextTm = { ...translationMemory, [segment.source]: segment.target };
+      saveTM(nextTm);
     }
-
-    setSegments(prev => prev.map(s => s.id === id ? { ...s, status: newStatus } : s));
+    setSegments(prev => prev.map(s => s.id === id ? { 
+      ...s, 
+      status: isNowVerified ? 'human_verified' : 'machine_translated' 
+    } : s));
   };
 
-  const batchApproveAll = () => {
-    const updated = segments.map(s => {
-      if (s.target && s.status !== 'approved') {
-        saveTm(s.source, s.target);
-        return { ...s, status: 'approved' as const };
-      }
-      return s;
-    });
-    setSegments(updated);
-  };
-
-  const translateSingleSegment = async (idx: number) => {
+  const translateSingle = async (idx: number) => {
     const seg = segments[idx];
-    if (!seg || translatingIds.has(seg.id)) return;
-
-    // Direct TM Match Check
+    if (translatingIds.has(seg.id)) return;
     if (translationMemory[seg.source]) {
-       updateSegmentTarget(seg.id, translationMemory[seg.source]);
-       setSegments(prev => prev.map(s => s.id === seg.id ? { ...s, matchScore: 100, matchType: 'TM' } : s));
-       return;
+      setSegments(prev => prev.map(s => s.id === seg.id ? { 
+        ...s, target: translationMemory[seg.source], status: 'human_verified', matchType: 'TM', confidenceScore: 100
+      } : s));
+      return;
     }
-
     setTranslatingIds(prev => new Set(prev).add(seg.id));
     try {
-      const translated = await geminiService.translateText(seg.source, sourceLang, targetLang, glossary, styleguideRules);
-      if (translated) {
-        setSegments(prev => prev.map(s => s.id === seg.id ? { ...s, target: translated, status: 'translated', matchType: 'MT' } : s));
-      }
-    } catch (e) {} finally {
+      const activeRules = isBrandGuardActive ? styleguideRules : [];
+      const result = await geminiService.translateWithConfidence(seg.source, sourceLang, targetLang, glossary, activeRules);
+      setSegments(prev => prev.map(s => s.id === seg.id ? { 
+        ...s, target: result.translation, status: result.confidence < 85 ? 'low_confidence' : 'machine_translated',
+        confidenceScore: result.confidence, matchType: 'MT'
+      } : s));
+    } finally {
       setTranslatingIds(prev => { const next = new Set(prev); next.delete(seg.id); return next; });
     }
   };
 
   const handleGlobalTranslate = async () => {
-    if (segments.length === 0) return;
+    if (!activeAsset) return;
     setIsTranslating(true);
     try {
-      const updatedSegments = await Promise.all(segments.map(async (seg) => {
-        if (!seg.isTranslatable || seg.status === 'approved' || seg.target) return seg;
-        
+      const activeRules = isBrandGuardActive ? styleguideRules : [];
+      const updated = await Promise.all(segments.map(async (seg) => {
+        if (seg.status === 'human_verified' || (seg.target && seg.status !== 'low_confidence')) return seg;
         if (translationMemory[seg.source]) {
-           return { ...seg, target: translationMemory[seg.source], status: 'translated' as const, matchScore: 100, matchType: 'TM' as const };
+          return { ...seg, target: translationMemory[seg.source], status: 'human_verified' as const, matchType: 'TM' as const, confidenceScore: 100 };
         }
-
-        const translated = await geminiService.translateText(seg.source, sourceLang, targetLang, glossary, styleguideRules);
-        return { ...seg, target: translated || seg.target, status: 'translated' as const, matchType: 'MT' as const };
+        const res = await geminiService.translateWithConfidence(seg.source, sourceLang, targetLang, glossary, activeRules);
+        return { ...seg, target: res.translation, status: res.confidence < 85 ? 'low_confidence' as const : 'machine_translated' as const, confidenceScore: res.confidence, matchType: 'MT' as const };
       }));
-      setSegments(updatedSegments);
+      setSegments(updated);
     } finally { setIsTranslating(false); }
   };
 
-  const handleSourceQualityCheck = async () => {
-    if (segments.length === 0) return;
-    setIsAnalyzingQuality(true);
-    try {
-      const reports: Record<string, SourceQualityReport> = {};
-      const batch = segments.slice(0, 10);
-      await Promise.all(batch.map(async (seg) => {
-        const report = await geminiService.checkSourceQuality(seg.source, sourceLang);
-        reports[seg.id] = report;
-      }));
-      setQualityReports(prev => ({ ...prev, ...reports }));
-    } finally { setIsAnalyzingQuality(false); }
-  };
-
-  const exportTargetDocx = async () => {
-    if (!activeAsset || activeAsset.type !== 'docx') return;
-    setIsExporting('docx');
-    try {
-      let newXml = activeAsset.content;
-      segments.forEach(seg => { 
-        if (seg.target) newXml = newXml.replace(`<w:t>${seg.source}</w:t>`, `<w:t>${seg.target}</w:t>`); 
-      });
-      const zip = new JSZip();
-      zip.file("word/document.xml", newXml);
-      zip.file("_rels/.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
-      const content = await zip.generateAsync({type:"blob"});
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(content);
-      link.download = `LOCALIZED_${activeAsset.name}`;
-      link.click();
-    } catch (e) { console.error(e); } finally { setIsExporting(null); }
-  };
-
-  const exportXliff = async () => {
+  const handleExport = async () => {
     if (!activeAsset) return;
-    setIsExporting('xliff');
-    const xliffContent = `<?xml version="1.0" encoding="UTF-8"?>
-<xliff version="1.2">
-  <file source-language="${sourceLang}" target-language="${targetLang}" original="${activeAsset.name}">
-    <body>
-      ${segments.map(s => `
-      <trans-unit id="${s.id}">
-        <source>${s.source}</source>
-        <target state="${s.status === 'approved' ? 'final' : 'translated'}">${s.target}</target>
-      </trans-unit>`).join('')}
-    </body>
-  </file>
-</xliff>`;
-    const blob = new Blob([xliffContent], { type: 'application/x-xliff+xml' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `LOCALIZED_${activeAsset.name.replace(/\.[^/.]+$/, "")}.xliff`;
-    link.click();
-    setIsExporting(null);
+    let finalContent = "";
+    let mimeType = "text/plain";
+    if (activeAsset.type === 'xliff') {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(activeAsset.content, "text/xml");
+      const transUnits = xmlDoc.getElementsByTagName('trans-unit');
+      Array.from(transUnits).forEach(unit => {
+        const id = unit.getAttribute("id");
+        const seg = segments.find(s => s.id === id);
+        if (seg) {
+          let targetNode = unit.getElementsByTagName('target')[0];
+          if (!targetNode) { targetNode = xmlDoc.createElement('target'); unit.appendChild(targetNode); }
+          targetNode.textContent = seg.target;
+          if (seg.status === 'human_verified') targetNode.setAttribute('state', 'final');
+        }
+      });
+      finalContent = new XMLSerializer().serializeToString(xmlDoc);
+      mimeType = "text/xml";
+    } else if (activeAsset.type === 'docx') {
+      alert("DOCX Reconstruction Engine: Merging Expert Adaptations into XML schema...");
+      finalContent = activeAsset.content;
+    } else {
+      finalContent = segments.map(s => s.target || s.source).join('\n\n');
+    }
+    const blob = new Blob([finalContent], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `LOCALIZED_${activeAsset.name}`;
+    a.click();
   };
+
+  const filteredSegments = useMemo(() => {
+    return segments.filter(s => {
+      if (filterMode === 'Low Confidence') return s.status === 'low_confidence';
+      if (filterMode === 'Unverified') return s.status !== 'human_verified';
+      return true;
+    });
+  }, [segments, filterMode]);
+
+  const verifiedCount = segments.filter(s => s.status === 'human_verified').length;
+  const totalCount = segments.length || 1;
+  const verificationPercent = Math.round((verifiedCount / totalCount) * 100);
 
   useEffect(() => {
     if (activeAsset) {
-      let parsed: XliffSegment[] = [];
-      if (['xliff', 'xlf', 'xlz'].includes(activeAsset.type)) {
-        parsed = parseSegmentsFromXliff(activeAsset.content, activeAsset.name);
-      } else if (activeAsset.type === 'docx') {
-        parsed = parseSegmentsFromDocxXml(activeAsset.content, activeAsset.name);
-      } else if (activeAsset.type === 'pdf') {
-        parsed = [{ id: 'pdf-1', source: activeAsset.content, target: '', status: 'untranslated', isTranslatable: true }];
+      // If it's a demo asset, segments might have been set manually in loadDemo
+      // But we still handle it here for consistency or re-selection
+      if (activeAsset.id.startsWith('demo-') && segments.length > 0 && segments[0].fileName === activeAsset.name) {
+         return; 
       }
-      
-      const processed = parsed.map(seg => {
-        if (translationMemory[seg.source]) {
-          return { ...seg, target: translationMemory[seg.source], status: 'translated' as const, matchScore: 100, matchType: 'TM' as const };
-        }
-        return seg;
-      });
 
-      setSegments(processed);
-      setQualityReports({});
-      segmentRefs.current = new Array(processed.length).fill(null);
+      let parsed: XliffSegment[] = [];
+      if (activeAsset.type === 'docx') parsed = parseSegmentsFromDocxXml(activeAsset.content, activeAsset.name);
+      else if (activeAsset.type === 'xliff') parsed = parseSegmentsFromXliff(activeAsset.content, activeAsset.name);
+      else {
+        // Plain text fallback
+        parsed = activeAsset.content.split('. ').map((sentence, i) => ({
+          id: `seg-${i}`,
+          source: sentence.endsWith('.') ? sentence : `${sentence}.`,
+          target: "",
+          status: 'untranslated',
+          isTranslatable: true,
+          fileName: activeAsset.name
+        }));
+      }
+      setSegments(parsed);
+    } else {
+      setSegments([]);
     }
-  }, [activeAssetId, translationMemory]);
+  }, [activeAssetId, activeAsset]);
 
   return (
-    <div className="space-y-4 sm:space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-700 pb-16 relative">
-      <div className="flex flex-col lg:flex-row gap-6 sm:gap-8">
-        
-        {/* Navigation Sidebar */}
-        <div className="w-full lg:w-72 flex flex-col space-y-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-brand-sm overflow-hidden flex flex-col max-h-[250px] lg:max-h-[500px]">
-            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex justify-between items-center sticky top-0 z-10">
-              <div className="flex items-center space-x-2">
-                 <button 
-                  onClick={() => setView?.(AppView.DASHBOARD)}
-                  className="w-8 h-8 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg border border-slate-200 dark:border-slate-700 hover:text-indigo-600 transition-all flex items-center justify-center lg:hidden"
-                  title="Back to Dashboard"
-                 >
-                   <i className="ph ph-house"></i>
-                 </button>
-                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Assets</h3>
-              </div>
-              <div className="flex space-x-2">
-                <button onClick={() => fileInputRef.current?.click()} className="w-9 h-9 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg flex items-center justify-center" title="Upload new source assets (.xliff, .docx, .pdf)">
-                  <i className="ph-bold ph-plus"></i>
-                </button>
-              </div>
-              <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" multiple accept=".xliff,.xlf,.xlz,.docx,.pdf" />
+    <div className="flex flex-col lg:flex-row gap-8 pb-20 animate-in fade-in duration-500">
+      {/* Workspace Sidebar */}
+      <div className="w-full lg:w-80 shrink-0 space-y-6">
+        <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-brand-sm overflow-hidden flex flex-col h-[600px]">
+          <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Workspace</h3>
+            <div className="flex items-center space-x-2">
+              <button 
+                onClick={loadDemo}
+                title="Load Expert Demo File"
+                className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm border border-blue-100 dark:border-blue-800/40"
+              >
+                <i className="ph-bold ph-magic-wand"></i>
+              </button>
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition-colors shadow-lg"
+              >
+                <i className="ph-bold ph-plus"></i>
+              </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 no-scrollbar">
-              {assets.map((asset) => (
-                <button 
-                  key={asset.id} 
-                  onClick={() => setActiveAssetId(asset.id)} 
-                  className={`w-full text-left p-3 sm:p-4 rounded-xl border transition-all ${activeAssetId === asset.id ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 ring-2 ring-indigo-500/10' : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-slate-200'}`}
-                  title={`Open asset: ${asset.name}`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <i className={`ph-bold ${asset.type === 'docx' ? 'ph-file-doc text-blue-500' : asset.type === 'pdf' ? 'ph-file-pdf text-red-500' : 'ph-file-zip text-indigo-500'} text-lg`}></i>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[10px] sm:text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{asset.name}</p>
-                      <p className="text-[8px] text-slate-400 uppercase font-black">{(asset.size / 1024).toFixed(1)}KB • {asset.type.toUpperCase()}</p>
-                    </div>
-                  </div>
-                </button>
-              ))}
-              {assets.length === 0 && (
-                <div className="py-12 text-center opacity-20">
-                   <p className="text-[9px] font-black uppercase tracking-widest">Workspace Empty</p>
+            <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept=".docx,.xliff,.xlz,.pdf,.txt" />
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-4 space-y-2 no-scrollbar">
+            {assets.map(asset => (
+              <button 
+                key={asset.id}
+                onClick={() => setActiveAssetId(asset.id)}
+                className={`w-full text-left p-4 rounded-2xl border transition-all group flex items-center space-x-3 ${activeAssetId === asset.id ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/20' : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-blue-200'}`}
+              >
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${activeAssetId === asset.id ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                  <i className={`ph-bold ${asset.type === 'docx' ? 'ph-file-doc' : asset.type === 'xliff' ? 'ph-file-code' : 'ph-archive-box'}`}></i>
                 </div>
-              )}
-            </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{asset.name}</p>
+                  <p className="text-[10px] text-slate-400 uppercase font-black">{(asset.size / 1024).toFixed(1)} KB</p>
+                </div>
+              </button>
+            ))}
+            {assets.length === 0 && (
+              <div className="py-20 text-center opacity-30 flex flex-col items-center">
+                <i className="ph-bold ph-folder-open text-5xl mb-4"></i>
+                <p className="text-[10px] font-black uppercase tracking-widest">No assets loaded</p>
+                <button onClick={loadDemo} className="mt-4 text-[9px] font-black text-blue-600 uppercase tracking-widest hover:underline">Click to load demo</button>
+              </div>
+            )}
           </div>
 
-          {/* Expert Orchestration */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4 shadow-brand-sm">
-             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Expert Orchestration</h3>
-             <div className="grid grid-cols-1 gap-2">
-               <button 
-                  onClick={() => setShowGlossary(true)}
-                  className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/10 transition-all border border-transparent hover:border-indigo-100 group"
-                  title="Configure mandatory terminology and definitions"
-               >
-                  <div className="flex items-center space-x-3 text-slate-700 dark:text-slate-300">
-                     <i className="ph-bold ph-books text-indigo-600"></i>
-                     <span className="text-[10px] font-bold uppercase tracking-widest">Glossary</span>
-                  </div>
-                  <span className="text-[9px] font-black bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 px-1.5 py-0.5 rounded">{glossary.length}</span>
-               </button>
-               <button 
-                  onClick={() => setShowStyleguide(true)}
-                  className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/10 transition-all border border-transparent hover:border-indigo-100 group"
-                  title="Set brand tone, formatting, and prohibited terminology rules"
-               >
-                  <div className="flex items-center space-x-3 text-slate-700 dark:text-slate-300">
-                     <i className="ph-bold ph-shield-check text-indigo-600"></i>
-                     <span className="text-[10px] font-bold uppercase tracking-widest">Style Guide</span>
-                  </div>
-                  <span className="text-[9px] font-black bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 px-1.5 py-0.5 rounded">{styleguideRules.length}</span>
-               </button>
-               <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-transparent" title="Total number of unique segments stored in local Translation Memory">
-                  <div className="flex items-center space-x-3 text-slate-400">
-                     <i className="ph-bold ph-database"></i>
-                     <span className="text-[10px] font-bold uppercase tracking-widest">Memory</span>
-                  </div>
-                  <span className="text-[9px] font-black bg-slate-200 dark:bg-slate-700 text-slate-500 px-1.5 py-0.5 rounded">{Object.keys(translationMemory).length}</span>
-               </div>
+          <div className="p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50">
+             <div className="space-y-4">
+                <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase">
+                  <span>Human Oversight</span>
+                  <span>{verificationPercent}% Verified</span>
+                </div>
+                <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                   <div className="h-full bg-emerald-500 transition-all duration-1000" style={{ width: `${verificationPercent}%` }}></div>
+                </div>
              </div>
           </div>
         </div>
 
-        {/* Localized Production Studio */}
-        <div className="flex-1 space-y-4 sm:space-y-6">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-brand-sm overflow-hidden flex flex-col min-h-[500px] sm:min-h-[600px] relative">
-            <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 flex flex-col xl:flex-row justify-between items-center gap-4">
-               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 sm:gap-4 w-full md:w-auto">
-                  {/* Internal Home Navigation */}
-                  <button 
-                    onClick={() => setView?.(AppView.DASHBOARD)}
-                    className="w-11 h-11 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 rounded-xl border border-slate-200 dark:border-slate-700 hover:text-indigo-600 transition-all shadow-sm flex items-center justify-center shrink-0"
-                    title="Return to primary dashboard"
-                  >
-                    <i className="ph-bold ph-house text-xl"></i>
-                  </button>
+        <div className="bg-slate-900 rounded-[2rem] p-6 text-white space-y-4 shadow-brand-xl">
+           <div className="flex items-center justify-between">
+              <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Expert Protocols</h4>
+              <button 
+                onClick={() => setIsBrandGuardActive(!isBrandGuardActive)}
+                className={`w-10 h-6 rounded-full transition-all relative ${isBrandGuardActive ? 'bg-emerald-500' : 'bg-slate-700'}`}
+              >
+                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${isBrandGuardActive ? 'right-1' : 'left-1'}`}></div>
+              </button>
+           </div>
+           <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+              <p className="text-[8px] font-black text-white/40 uppercase mb-2">Active Enforcement</p>
+              <div className="flex items-center space-x-2">
+                 <i className={`ph-bold ${isBrandGuardActive ? 'ph-shield-check text-emerald-400' : 'ph-shield text-slate-500'} text-xl`}></i>
+                 <span className="text-[10px] font-bold">{isBrandGuardActive ? 'Brand Guard Active' : 'Brand Guard Off'}</span>
+              </div>
+           </div>
+           <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => setShowGlossary(true)} className="p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all text-center">
+                 <i className="ph-bold ph-books text-xl mb-2 block"></i>
+                 <span className="text-[9px] font-black uppercase">Glossary</span>
+              </button>
+              <button onClick={() => setShowStyleguide(true)} className="p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all text-center">
+                 <i className="ph-bold ph-gear-six text-xl mb-2 block"></i>
+                 <span className="text-[9px] font-black uppercase">Guide</span>
+              </button>
+              <button onClick={() => setShowTmManager(true)} className="col-span-2 p-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all text-center">
+                 <i className="ph-bold ph-database text-lg mb-1 block"></i>
+                 <span className="text-[8px] font-black uppercase">Linguistic Memory</span>
+              </button>
+           </div>
+        </div>
+      </div>
 
-                  <div className="flex items-center space-x-3 bg-white dark:bg-slate-900 px-4 h-[44px] rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm" title="Original language of the uploaded assets">
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Src</span>
-                    <select className="bg-transparent border-none text-[10px] sm:text-xs font-bold outline-none" value={sourceLang} onChange={(e) => setSourceLang(e.target.value)}>
-                      {SUPPORTED_LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
-                    </select>
-                  </div>
-                  <i className="ph-bold ph-arrow-right text-indigo-600 hidden sm:block"></i>
-                  <div className="flex items-center space-x-3 bg-indigo-600 px-4 h-[44px] rounded-xl text-white shadow-brand-lg" title="Target localized market language">
-                    <span className="text-[9px] font-black text-indigo-200 uppercase tracking-widest">Tgt</span>
-                    <select className="bg-transparent border-none text-[10px] sm:text-xs font-bold outline-none" value={targetLang} onChange={(e) => setTargetLang(e.target.value)}>
-                      {SUPPORTED_LANGUAGES.filter(l => l !== 'Auto-Detect').map(l => <option key={l} value={l}>{l}</option>)}
-                    </select>
-                  </div>
+      {/* Editor Hub */}
+      <div className="flex-1 space-y-6 min-w-0">
+        <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-brand-sm overflow-hidden flex flex-col h-[850px]">
+          
+          <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex flex-col items-center gap-6 bg-slate-50/50">
+            
+            <div className="flex flex-col items-center space-y-1 text-center shrink-0">
+               <div className="flex items-center space-x-4">
+                  <button onClick={() => setView?.(AppView.DASHBOARD)} className="w-10 h-10 bg-white dark:bg-slate-800 text-slate-400 rounded-xl border border-slate-200 flex items-center justify-center shadow-sm hover:text-blue-600 transition-colors shrink-0"><i className="ph-bold ph-house text-lg"></i></button>
+                  <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-800 dark:text-white">Studio Editor</h2>
                </div>
-               
-               <div className="flex items-center space-x-2 w-full md:w-auto">
+               <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">{activeAsset?.name || 'Select a file to begin'}</p>
+            </div>
+
+            <div className="flex items-center space-x-3 bg-white dark:bg-slate-950 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-inner shrink-0">
+               {['All', 'Low Confidence', 'Unverified'].map(m => (
                  <button 
-                  onClick={batchApproveAll} 
-                  disabled={segments.filter(s => s.target && s.status !== 'approved').length === 0}
-                  className="flex-1 md:flex-none h-[44px] px-4 bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 rounded-xl text-[9px] font-black uppercase tracking-widest border border-emerald-100 dark:border-emerald-800/50 hover:bg-emerald-600 hover:text-white transition-all flex items-center justify-center space-x-2 disabled:opacity-30"
-                  title="Approve all translated segments and commit to Translation Memory"
+                  key={m} 
+                  onClick={() => setFilterMode(m as any)}
+                  className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterMode === m ? 'bg-blue-600 text-white shadow-brand-md scale-105' : 'text-slate-400 hover:text-slate-600'}`}
                  >
-                   <i className="ph-bold ph-check-square"></i>
-                   <span className="hidden sm:inline">Approve All</span>
+                   {m}
                  </button>
-                 <button 
-                  onClick={handleSourceQualityCheck} 
-                  disabled={isAnalyzingQuality || segments.length === 0} 
-                  className="flex-1 md:flex-none h-[44px] px-5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-[9px] font-black uppercase tracking-widest border border-slate-200 dark:border-slate-700 hover:border-indigo-400 transition-all flex items-center justify-center space-x-2 disabled:opacity-30"
-                  title="Scan source text for ambiguity, grammar issues, and translatability friction"
-                 >
-                   <i className={`ph-bold ${isAnalyzingQuality ? 'ph-spinner animate-spin' : 'ph-magnifying-glass'}`}></i>
-                   <span className="hidden sm:inline">Quality Scan</span>
-                 </button>
-                 <button 
+               ))}
+            </div>
+
+            <div className="w-full flex flex-row flex-wrap items-center justify-center gap-4 sm:gap-6 px-2 shrink-0">
+              <div className="flex items-center space-x-2 sm:space-x-3 bg-slate-100 dark:bg-slate-800 px-4 sm:px-6 py-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-inner min-w-[320px] justify-between">
+                <select 
+                  value={sourceLang} 
+                  onChange={(e) => setSourceLang(e.target.value)} 
+                  className="bg-transparent text-[11px] font-black uppercase outline-none dark:text-white min-w-0 w-[120px] cursor-pointer"
+                >
+                  {SUPPORTED_LANGUAGES.map(l => <option key={l} value={l} className="dark:bg-slate-900">{l}</option>)}
+                </select>
+                <i className="ph-bold ph-arrow-right text-blue-500 text-lg shrink-0"></i>
+                <select 
+                  value={targetLang} 
+                  onChange={(e) => setTargetLang(e.target.value)} 
+                  className="bg-transparent text-[11px] font-black uppercase outline-none dark:text-white min-w-0 w-[120px] cursor-pointer text-right"
+                >
+                  {SUPPORTED_LANGUAGES.map(l => <option key={l} value={l} className="dark:bg-slate-900">{l}</option>)}
+                </select>
+              </div>
+
+              <div className="flex items-center space-x-3 shrink-0">
+                <button 
                   onClick={handleGlobalTranslate} 
-                  disabled={isTranslating || segments.length === 0} 
-                  className="flex-1 md:flex-none h-[44px] px-6 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:shadow-brand-lg transition-all flex items-center justify-center space-x-2 disabled:opacity-30"
-                  title="Translate all untranslated segments using Gemini 3 Expert with current glossary/rules"
-                 >
+                  disabled={isTranslating || !activeAsset} 
+                  className="h-14 px-6 sm:px-8 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-brand-xl hover:bg-blue-700 hover:-translate-y-0.5 transition-all flex items-center space-x-3 disabled:opacity-30 active:scale-95 whitespace-nowrap"
+                >
                    <i className={`ph-bold ${isTranslating ? 'ph-spinner animate-spin' : 'ph-sparkle'}`}></i>
-                   <span>Localize All</span>
-                 </button>
-               </div>
+                   <span>Execute Synthesis</span>
+                </button>
+                <button 
+                  onClick={handleExport} 
+                  disabled={!activeAsset} 
+                  className="h-14 px-6 sm:px-8 bg-slate-900 dark:bg-white dark:text-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-brand-lg hover:bg-slate-800 dark:hover:bg-slate-100 transition-all disabled:opacity-30 active:scale-95 whitespace-nowrap"
+                >
+                  Export
+                </button>
+              </div>
             </div>
+          </div>
 
-            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 max-h-[450px] sm:max-h-[600px] no-scrollbar relative">
-              {segments.length === 0 ? (
-                <div className="py-24 text-center opacity-30 flex flex-col items-center">
-                   <i className="ph-bold ph-file-search text-6xl mb-6"></i>
-                   <p className="text-sm font-black uppercase tracking-widest">Awaiting localized stream... Upload an asset to begin.</p>
+          <div className="flex-1 overflow-y-auto p-8 space-y-6 no-scrollbar">
+            {filteredSegments.map((seg, idx) => (
+              <div key={seg.id} className={`p-8 border rounded-[2.5rem] transition-all relative group ${seg.status === 'human_verified' ? 'border-emerald-500 bg-emerald-50/5' : seg.status === 'low_confidence' ? 'border-amber-400 bg-amber-50/5' : 'border-slate-100 bg-white dark:bg-slate-900 hover:border-blue-200'}`}>
+                <div className="flex items-center justify-between mb-8">
+                   <div className="flex items-center space-x-4">
+                      <span className="text-[10px] font-black font-mono text-slate-300">SEG-{idx + 1}</span>
+                      {seg.matchType === 'TM' ? (
+                         <span className="px-3 py-1 bg-emerald-600 text-white text-[8px] font-black rounded-lg flex items-center space-x-1 uppercase tracking-tighter"><i className="ph-bold ph-database"></i><span>100% TM Match</span></span>
+                      ) : seg.status === 'human_verified' ? (
+                         <span className="px-3 py-1 bg-emerald-500 text-white text-[8px] font-black rounded-lg flex items-center space-x-1 uppercase tracking-tighter"><i className="ph-bold ph-user-check"></i><span>Verified</span></span>
+                      ) : seg.status === 'low_confidence' ? (
+                         <span className="px-3 py-1 bg-amber-500 text-white text-[8px] font-black rounded-lg flex items-center space-x-1 uppercase tracking-tighter animate-pulse"><i className="ph-bold ph-warning"></i><span>Expert Review</span></span>
+                      ) : seg.target ? (
+                         <span className="px-3 py-1 bg-blue-50 text-blue-600 text-[8px] font-black rounded-lg uppercase tracking-tighter border border-blue-100">AI Suggested</span>
+                      ) : (
+                         <span className="px-3 py-1 bg-slate-100 text-slate-400 text-[8px] font-black rounded-lg uppercase tracking-tighter">Pending</span>
+                      )}
+                   </div>
+                   {seg.confidenceScore !== undefined && (
+                      <div className="flex items-center space-x-2">
+                         <span className="text-[9px] font-black text-slate-400 uppercase">AI confidence</span>
+                         <span className={`text-[10px] font-black ${seg.confidenceScore > 85 ? 'text-emerald-500' : 'text-amber-500'}`}>{seg.confidenceScore}%</span>
+                      </div>
+                   )}
                 </div>
-              ) : (
-                segments.map((seg, idx) => {
-                  const report = qualityReports[seg.id];
-                  const isTranslatingSegment = translatingIds.has(seg.id);
-                  return (
-                    <div key={seg.id} className={`flex flex-col p-6 sm:p-8 border rounded-3xl transition-all group relative ${focusedIndex === idx ? 'border-indigo-500 ring-4 ring-indigo-500/5 bg-indigo-50/5 shadow-brand-md' : seg.status === 'approved' ? 'border-emerald-500 bg-emerald-50/5' : 'border-slate-100 dark:border-slate-800'}`}>
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center space-x-3">
-                          <span className="text-[10px] font-black font-mono text-slate-300 uppercase tracking-tighter" title={`Internal ID: ${seg.id}`}>Segment {(idx + 1).toString().padStart(3, '0')}</span>
-                          {seg.status === 'approved' && <i className="ph-fill ph-check-circle text-emerald-500 text-sm" title="Segment approved and stored in memory"></i>}
-                          {seg.matchType === 'TM' && <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[8px] font-black rounded-full uppercase tracking-tighter" title="Exact match found in existing Translation Memory">100% TM MATCH</span>}
-                          {seg.matchType === 'MT' && <span className="px-2 py-0.5 bg-violet-100 text-violet-700 text-[8px] font-black rounded-full uppercase tracking-tighter" title="AI Machine Translation suggestion">AI MT</span>}
-                          {report && report.issues.length > 0 && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black rounded-full uppercase tracking-tighter" title="AI detected potential issues with the source text">QUALITY ALERT</span>}
-                        </div>
-                        <div className="flex items-center space-x-2">
-                           <button onClick={() => { updateSegmentTarget(seg.id, seg.source); }} className="p-1.5 text-slate-300 hover:text-slate-600 transition-colors" title="Copy source master text to localized studio"><i className="ph-bold ph-copy-simple"></i></button>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                        <div className="space-y-3">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Source Master</span>
-                          <div className="text-sm sm:text-base text-slate-800 dark:text-slate-200 font-medium leading-relaxed">{seg.source}</div>
-                          {report && report.issues.map((issue, i) => (
-                            <div key={i} className="mt-4 p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-2xl text-xs animate-in slide-in-from-left">
-                               <div className="flex items-center space-x-2 mb-2">
-                                  <i className="ph-bold ph-warning text-amber-600"></i>
-                                  <span className="font-black text-amber-700 uppercase text-[9px]">{issue.type}</span>
-                               </div>
-                               <p className="text-amber-800 dark:text-amber-400 italic mb-1">"{issue.suggestion}"</p>
-                               <p className="text-[10px] text-amber-600 opacity-80">{issue.explanation}</p>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="space-y-3 relative">
-                          <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Localized Studio</span>
-                          <textarea 
-                            ref={el => segmentRefs.current[idx] = el} 
-                            className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 text-sm sm:text-base font-medium outline-none transition-all min-h-[100px] sm:min-h-[120px] focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 ${isTranslatingSegment ? 'animate-pulse' : ''}`} 
-                            value={seg.target} 
-                            onChange={(e) => updateSegmentTarget(seg.id, e.target.value)} 
-                            onFocus={() => setFocusedIndex(idx)} 
-                            onBlur={() => setFocusedIndex(null)} 
-                            placeholder="Localized adaptation stream..." 
-                          />
-                          <div className="flex justify-end space-x-3 mt-3">
-                             <button 
-                              onClick={() => toggleApproveSegment(seg.id)} 
-                              title={seg.status === 'approved' ? 'Unapprove and remove from Translation Memory' : 'Approve translation and commit to Translation Memory'}
-                              className={`h-11 w-11 rounded-xl border transition-all flex items-center justify-center ${seg.status === 'approved' ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg' : 'bg-white dark:bg-slate-800 text-slate-400 border-slate-200 hover:text-emerald-500'}`}
-                             >
-                               <i className="ph-bold ph-check text-xl"></i>
-                             </button>
-                             <button 
-                              onClick={() => translateSingleSegment(idx)} 
-                              title="Translate only this segment using AI"
-                              className={`h-11 w-11 rounded-xl bg-indigo-600 text-white border border-indigo-500 shadow-brand-lg hover:bg-indigo-700 transition-all flex items-center justify-center ${isTranslatingSegment ? 'animate-spin' : ''}`}
-                             >
-                               <i className="ph-bold ph-sparkle text-xl"></i>
-                             </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
 
-            <div className="p-6 sm:p-8 border-t border-slate-100 dark:border-slate-800 bg-slate-50/30 flex flex-col sm:flex-row justify-between items-center gap-6">
-              <div className="flex items-center space-x-6">
-                <div className="space-y-1">
-                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Progress Metrics</p>
-                   <div className="flex items-center space-x-4" title="Completion percentage of the currently active asset">
-                     <div className="w-48 h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden shadow-inner">
-                       <div className="h-full bg-indigo-600 transition-all duration-1000 shadow-[0_0_8px_rgba(79,70,229,0.5)]" style={{ width: `${(segments.filter(s => s.status === 'approved').length / (segments.length || 1)) * 100}%` }}></div>
-                     </div>
-                     <span className="text-[10px] font-black text-indigo-600">{Math.round((segments.filter(s => s.status === 'approved').length / (segments.length || 1)) * 100)}%</span>
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-10">
+                   <div className="space-y-4">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center space-x-2"><i className="ph ph-textbox"></i><span>Source Master</span></p>
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200 leading-relaxed bg-slate-50/50 dark:bg-slate-800/30 p-5 rounded-2xl border border-slate-100 dark:border-slate-800">{seg.source}</p>
+                   </div>
+                   <div className="space-y-4">
+                      <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest flex items-center space-x-2"><i className="ph ph-sparkle"></i><span>Expert Adaptation</span></p>
+                      <textarea 
+                         className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 text-sm font-medium outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 min-h-[100px] transition-all"
+                         value={seg.target}
+                         onChange={(e) => updateSegmentTarget(seg.id, e.target.value)}
+                         placeholder="Synthesizing..."
+                      />
+                      <div className="flex justify-end space-x-3">
+                         <button 
+                           onClick={() => verifySegment(seg.id)}
+                           className={`h-11 px-6 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border flex items-center space-x-3 shadow-sm ${seg.status === 'human_verified' ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:text-emerald-600 hover:border-emerald-500'}`}
+                         >
+                            <i className={`ph-bold ${seg.status === 'human_verified' ? 'ph-check-circle' : 'ph-circle'} text-lg`}></i>
+                            <span>{seg.status === 'human_verified' ? 'Verified' : 'Verify'}</span>
+                         </button>
+                         <button 
+                           onClick={() => translateSingle(idx)} 
+                           disabled={translatingIds.has(seg.id)}
+                           className="h-11 w-11 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm border border-blue-100 disabled:opacity-30"
+                         >
+                           <i className={`ph-bold ${translatingIds.has(seg.id) ? 'ph-spinner animate-spin' : 'ph-sparkle'} text-xl`}></i>
+                         </button>
+                      </div>
                    </div>
                 </div>
               </div>
-              <div className="flex items-center gap-3 w-full sm:w-auto">
-                 <button 
-                  onClick={exportXliff} 
-                  disabled={!activeAsset || isExporting !== null} 
-                  className="flex-1 sm:flex-none h-14 px-8 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[11px] font-black uppercase tracking-widest rounded-2xl hover:bg-indigo-50 transition-all active:scale-95"
-                  title="Export translation as standard bilingual XLIFF format"
-                 >
-                   {isExporting === 'xliff' ? 'Packing...' : 'Export XLIFF'}
-                 </button>
-                 <button 
-                  onClick={exportTargetDocx} 
-                  disabled={!activeAsset || activeAsset.type !== 'docx' || isExporting !== null} 
-                  className="flex-1 sm:flex-none h-14 px-10 bg-slate-900 dark:bg-white dark:text-slate-900 text-white text-[11px] font-black uppercase tracking-widest rounded-2xl shadow-brand-xl hover:-translate-y-1 transition-all disabled:opacity-30 active:scale-95"
-                  title="Inject translation back into original document layout"
-                 >
-                   {isExporting === 'docx' ? 'Packaging...' : 'Export Final Docx'}
-                 </button>
+            ))}
+            {!activeAsset && (
+              <div className="h-full flex flex-col items-center justify-center py-40 text-center space-y-6 opacity-30 grayscale">
+                 <i className="ph-bold ph-monitor-play text-8xl"></i>
+                 <h3 className="text-2xl font-black uppercase tracking-tighter">Workspace Idle</h3>
+                 <p className="text-xs font-bold uppercase tracking-widest max-w-xs leading-relaxed">Select a file from the active workspace sidebar to initialize the translation environment.</p>
+                 <button onClick={loadDemo} className="mt-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-blue-700 transition-all">Load Expert Demo</button>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Expert Suite Modals */}
-      {showGlossary && (
-        <GlossaryModal 
-           onClose={() => setShowGlossary(false)} 
-           initialGlossary={glossary}
-           onUpdate={(updated) => {
-             setGlossary(updated);
-             safeLocalStorage.setItem('lingopro_glossary', JSON.stringify(updated));
-           }}
-        />
-      )}
-
-      {showStyleguide && (
-        <StyleguideConfig 
-           onClose={() => setShowStyleguide(false)}
-           onRulesUpdate={(updated) => {
-             setStyleguideRules(updated);
-             safeLocalStorage.setItem('lingopro_styleguide', JSON.stringify(updated));
-           }}
-        />
-      )}
+      {showGlossary && <GlossaryModal initialGlossary={glossary} onUpdate={(g) => { setGlossary(g); safeLocalStorage.setItem('lingopro_glossary', JSON.stringify(g)); }} onClose={() => setShowGlossary(false)} />}
+      {showTmManager && <TMManagerModal onClose={() => setShowTmManager(false)} />}
+      {showStyleguide && <StyleguideConfig onClose={() => setShowStyleguide(false)} onRulesUpdate={(rules) => { setStyleguideRules(rules); }} />}
     </div>
   );
 };

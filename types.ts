@@ -39,6 +39,7 @@ export interface LocalizationAsset {
   content: string;
   size: number;
   status: 'pending' | 'translating' | 'completed';
+  verificationProgress?: number; // % of segments verified by human
   translatedContent?: string;
 }
 
@@ -49,24 +50,19 @@ export interface TranslationProject {
   targetLang: string;
   status: 'In Progress' | 'Completed' | 'Pending';
   progress: number;
+  verificationProgress: number; // Human-in-the-loop metric
   lastModified: string;
-}
-
-export interface TranscriptionTask {
-  id: string;
-  fileName: string;
-  text: string;
-  timestamp: string;
 }
 
 export interface XliffSegment {
   id: string;
   source: string;
   target: string;
-  status: 'untranslated' | 'translated' | 'approved' | 'locked' | 'hidden';
+  status: 'untranslated' | 'machine_translated' | 'human_verified' | 'low_confidence';
   internalState?: string;
   fileName?: string;
-  matchScore?: number; // 0-100 for TM matches
+  matchScore?: number; 
+  confidenceScore?: number; // AI-assigned confidence 0-100
   matchType?: 'TM' | 'MT' | 'Manual';
   isTranslatable?: boolean;
 }
@@ -77,43 +73,6 @@ export interface GlossaryTerm {
   description?: string;
 }
 
-export interface TranslationMemoryEntry {
-  source: string;
-  target: string;
-  usageCount: number;
-  lastUsed: string;
-  sourceLang: string;
-  targetLang: string;
-}
-
 export const SUPPORTED_LANGUAGES = [
-  "Auto-Detect",
-  "Arabic",
-  "Chinese (Simplified)",
-  "Chinese (Traditional)",
-  "Czech",
-  "Danish",
-  "Dutch",
-  "English",
-  "Finnish",
-  "French",
-  "German",
-  "Greek",
-  "Hindi",
-  "Hungarian",
-  "Indonesian",
-  "Italian",
-  "Japanese",
-  "Korean",
-  "Norwegian",
-  "Polish",
-  "Portuguese",
-  "Romanian",
-  "Russian",
-  "Spanish",
-  "Swedish",
-  "Thai",
-  "Turkish",
-  "Ukrainian",
-  "Vietnamese"
+  "Auto-Detect", "Arabic", "Chinese (Simplified)", "Chinese (Traditional)", "Czech", "Danish", "Dutch", "Dutch (Belgium)", "English", "Finnish", "French", "German", "Greek", "Hindi", "Hungarian", "Indonesian", "Italian", "Japanese", "Korean", "Norwegian", "Polish", "Portuguese", "Romanian", "Russian", "Spanish", "Swedish", "Thai", "Turkish", "Ukrainian", "Vietnamese"
 ];

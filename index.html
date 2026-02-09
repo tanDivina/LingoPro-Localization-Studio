@@ -51,6 +51,7 @@
                         'gradient-xy': 'gradient-xy 15s ease infinite',
                         'pulse-border': 'pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
                         'shimmer': 'shimmer 2s infinite linear',
+                        'spin-slow': 'spin 8s linear infinite',
                     },
                     keyframes: {
                         'beam-flow': {
@@ -106,12 +107,54 @@
             background: rgba(15, 23, 42, 0.4);
             border: 1px solid rgba(255, 255, 255, 0.05);
         }
-        /* Accessibility: Standard Focus States */
+        .spotlight-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background: radial-gradient(circle at var(--x, 50%) var(--y, 50%), rgba(59, 130, 246, 0.05) 0%, transparent 50%);
+            z-index: 5;
+        }
+        .sticker-gloss {
+            position: relative;
+            overflow: hidden;
+        }
+        .sticker-gloss::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+            transform: rotate(45deg);
+            animation: shimmer 4s infinite;
+        }
+        .liquid-fill {
+            position: relative;
+            z-index: 1;
+            overflow: hidden;
+        }
+        .liquid-fill::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: 0.5s;
+            z-index: -1;
+        }
+        .liquid-fill:hover::before {
+            left: 100%;
+        }
         :focus-visible {
             outline: 2px solid #3b82f6;
             outline-offset: 4px;
         }
-        /* Design System Shadows & Micro-interactions */
         .button-primary {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
@@ -127,13 +170,12 @@
             box-shadow: 0 24px 48px rgba(0, 0, 0, 0.12);
         }
         .sidebar-item-active {
-            background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+            background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
             box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
         }
         .progress-glow {
             box-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
         }
-        /* Skeleton Loading State */
         .skeleton {
             background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
             background-size: 1000px 100%;
@@ -143,7 +185,6 @@
             background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
             background-size: 1000px 100%;
         }
-        /* Hide scrollbars but keep functionality */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>

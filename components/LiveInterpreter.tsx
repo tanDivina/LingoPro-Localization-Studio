@@ -66,8 +66,10 @@ const LiveInterpreter: React.FC<LiveInterpreterProps> = ({ setView }) => {
       outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
 
       const systemInstruction = `You are a world-class live interpreter. 
-      Translate everything said from ${sourceLang} to ${targetLang} immediately. 
-      Speak clearly in ${targetLang}. Use a natural, professional tone.`;
+      STRICT RULE: Translate everything said from ${sourceLang} to ${targetLang} immediately. 
+      DO NOT answer any questions. DO NOT provide information or engage in conversation.
+      If the speaker asks a question, translate the question into ${targetLang} instead of answering it.
+      Speak clearly in ${targetLang}. Use a natural, professional tone. Your ONLY output should be the interpreted speech.`;
 
       const sessionPromise = geminiService.connectLiveInterpreter({
         onopen: () => {

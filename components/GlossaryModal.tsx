@@ -89,13 +89,13 @@ const GlossaryModal: React.FC<GlossaryModalProps> = ({ onClose, onUpdate, initia
           <div className="flex items-center space-x-3">
              <button 
                 onClick={() => fileInputRef.current?.click()}
-                className="h-11 px-6 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-black uppercase tracking-widest hover:border-indigo-400 transition-all flex items-center space-x-2 shadow-brand-sm"
+                className="h-11 px-6 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-black uppercase tracking-widest hover:border-blue-400 transition-all flex items-center space-x-2 shadow-brand-sm"
              >
                 <i className="ph-bold ph-upload"></i>
                 <span>Import</span>
              </button>
              <input type="file" ref={fileInputRef} className="hidden" accept=".json,.csv" onChange={handleImport} />
-             <button onClick={onClose} className="w-11 h-11 flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-400 hover:text-red-500 transition-colors shadow-brand-sm">
+             <button onClick={onClose} className="w-11 h-11 flex items-center justify-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-400 hover:text-red-500 transition-colors shadow-brand-sm">
                 <i className="ph-bold ph-x text-xl"></i>
              </button>
           </div>
@@ -115,7 +115,7 @@ const GlossaryModal: React.FC<GlossaryModalProps> = ({ onClose, onUpdate, initia
              </div>
              <button 
                 onClick={() => setIsAdding(true)}
-                className="h-12 px-8 bg-indigo-600 text-white text-xs font-black uppercase tracking-widest rounded-2xl shadow-brand-lg hover:bg-indigo-700 transition-all flex items-center space-x-3 shrink-0"
+                className="h-12 px-8 bg-blue-600 text-white text-xs font-black uppercase tracking-widest rounded-2xl shadow-brand-lg hover:bg-blue-700 transition-all flex items-center space-x-3 shrink-0"
              >
                 <i className="ph-bold ph-plus"></i>
                 <span>New Term</span>
@@ -123,42 +123,42 @@ const GlossaryModal: React.FC<GlossaryModalProps> = ({ onClose, onUpdate, initia
           </div>
 
           {isAdding && (
-            <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-6 rounded-[2rem] border border-indigo-100 dark:border-indigo-800/50 space-y-4 animate-in slide-in-from-top-4 duration-300">
+            <div className="bg-blue-50/50 dark:bg-blue-900/10 p-6 rounded-[2rem] border border-blue-100 dark:border-blue-800/50 space-y-4 animate-in slide-in-from-top-4 duration-300">
                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                     <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest px-2">Source Term</label>
+                     <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest px-2">Source Term</label>
                      <input 
                         type="text" 
                         value={newTerm.source}
                         onChange={(e) => setNewTerm({...newTerm, source: e.target.value})}
-                        className="w-full h-11 px-4 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-xl text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/10"
+                        className="w-full h-11 px-4 bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 rounded-xl text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10"
                         placeholder="e.g. Dashboard"
                      />
                   </div>
                   <div className="space-y-1">
-                     <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest px-2">Target Translation</label>
+                     <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest px-2">Target Translation</label>
                      <input 
                         type="text" 
                         value={newTerm.target}
                         onChange={(e) => setNewTerm({...newTerm, target: e.target.value})}
-                        className="w-full h-11 px-4 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-xl text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/10"
+                        className="w-full h-11 px-4 bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 rounded-xl text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10"
                         placeholder="e.g. 制御パネル"
                      />
                   </div>
                </div>
                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest px-2">Context / Notes</label>
+                  <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest px-2">Context / Notes</label>
                   <input 
                      type="text" 
                      value={newTerm.description}
                      onChange={(e) => setNewTerm({...newTerm, description: e.target.value})}
-                     className="w-full h-11 px-4 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-xl text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/10"
+                     className="w-full h-11 px-4 bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 rounded-xl text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10"
                      placeholder="Usage notes..."
                   />
                </div>
                <div className="flex justify-end space-x-3 pt-2">
                   <button onClick={() => setIsAdding(false)} className="px-6 py-2 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Cancel</button>
-                  <button onClick={handleAddTerm} className="px-8 py-2 bg-indigo-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-indigo-700 shadow-brand-lg transition-all">Add Protocol</button>
+                  <button onClick={handleAddTerm} className="px-8 py-2 bg-blue-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-blue-700 shadow-brand-lg transition-all">Add Protocol</button>
                </div>
             </div>
           )}
@@ -180,7 +180,7 @@ const GlossaryModal: React.FC<GlossaryModalProps> = ({ onClose, onUpdate, initia
                       <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{term.source}</span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1 rounded-lg border border-indigo-100 dark:border-indigo-800/50">{term.target}</span>
+                      <span className="text-sm font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-3 py-1 rounded-lg border border-blue-100 dark:border-blue-800/50">{term.target}</span>
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate max-w-xs block">{term.description || '--'}</span>
