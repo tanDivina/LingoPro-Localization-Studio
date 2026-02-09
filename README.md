@@ -3,6 +3,7 @@ The Frontier of Global Communication | Powered by Gemini 3 Expert Architecture
 LingoPro is an enterprise-grade localization platform designed to eliminate linguistic friction. Unlike traditional tools that focus on text replacement, LingoPro treats localization as a multi-modal cultural adaptation process. From sub-100ms live interpreting to structural document reconstruction, LingoPro ensures your message feels native, regardless of the medium.
 
 ✨ Features
+
 🏢 Expert File Studio
 Support for professional industry formats including DOCX, XLIFF, and PDF.
 Structural Anchoring: Preserves document layout, XML schemas, and styles during translation.
